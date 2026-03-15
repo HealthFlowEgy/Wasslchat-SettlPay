@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { TenantId } from '../../common/decorators/current-user.decorator';
@@ -22,11 +23,11 @@ export class UsersController {
 
   @Post() @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Add team member' })
-  async create(@TenantId() tid: string, @Body() dto: any) { return this.service.create(tid, dto); }
+  async create(@TenantId() tid: string, @Body() dto: CreateUserDto) { return this.service.create(tid, dto); }
 
   @Patch(':id') @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Update team member' })
-  async update(@TenantId() tid: string, @Param('id') id: string, @Body() dto: any) { return this.service.update(tid, id, dto); }
+  async update(@TenantId() tid: string, @Param('id') id: string, @Body() dto: UpdateUserDto) { return this.service.update(tid, id, dto); }
 
   @Delete(':id') @Roles('OWNER')
   @ApiOperation({ summary: 'Deactivate team member' })

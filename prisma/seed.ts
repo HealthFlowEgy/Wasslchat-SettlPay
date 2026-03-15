@@ -4,7 +4,7 @@ import * as bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seeding WasslChat database...');
+  console.log('🌱 Seeding WasslChat database...');
 
   // Plans
   const plans = await Promise.all([
@@ -13,7 +13,7 @@ async function main() {
     prisma.plan.upsert({ where: { slug: 'business' }, update: {}, create: { name: 'Business', nameAr: 'الأعمال', slug: 'business', priceMonthly: 1999, priceYearly: 19990, maxConversations: 5000, maxTeamMembers: 10, maxProducts: -1, maxBroadcastsPerMonth: 100, maxContacts: 10000, features: { whatsapp: true, catalog: true, orders: true, payments: true, chatbot: true, analytics: true, broadcasts: true, automation: true, integrations: true, ai: true }, sortOrder: 3 } }),
     prisma.plan.upsert({ where: { slug: 'enterprise' }, update: {}, create: { name: 'Enterprise', nameAr: 'المؤسسات', slug: 'enterprise', priceMonthly: 0, priceYearly: 0, maxConversations: -1, maxTeamMembers: -1, maxProducts: -1, maxBroadcastsPerMonth: -1, maxContacts: -1, features: { whatsapp: true, catalog: true, orders: true, payments: true, chatbot: true, analytics: true, broadcasts: true, automation: true, integrations: true, ai: true, whiteLabel: true, dedicatedSupport: true, customDomain: true }, sortOrder: 4 } }),
   ]);
-  console.log(`${plans.length} plans created`);
+  console.log(`✅ ${plans.length} plans created`);
 
   // Demo tenant
   const passwordHash = await bcrypt.hash('demo2026', 12);
@@ -27,7 +27,7 @@ async function main() {
       users: { create: { email: 'demo@wasslchat.com', passwordHash, firstName: 'Ahmed', lastName: 'Demo', firstNameAr: 'أحمد', lastNameAr: 'تجريبي', phone: '01012345678', role: 'OWNER' } },
     },
   });
-  console.log(`Demo tenant: ${tenant.name} (${tenant.slug})`);
+  console.log(`✅ Demo tenant: ${tenant.name} (${tenant.slug})`);
 
   // Demo categories
   const cats = await Promise.all([
@@ -35,7 +35,7 @@ async function main() {
     prisma.category.upsert({ where: { tenantId_slug: { tenantId: tenant.id, slug: 'fashion' } }, update: {}, create: { tenantId: tenant.id, name: 'Fashion', nameAr: 'أزياء', slug: 'fashion', sortOrder: 2 } }),
     prisma.category.upsert({ where: { tenantId_slug: { tenantId: tenant.id, slug: 'health' } }, update: {}, create: { tenantId: tenant.id, name: 'Health & Beauty', nameAr: 'صحة وجمال', slug: 'health', sortOrder: 3 } }),
   ]);
-  console.log(`${cats.length} categories created`);
+  console.log(`✅ ${cats.length} categories created`);
 
   // Demo products
   const products = [
@@ -52,7 +52,13 @@ async function main() {
       create: { ...p, tenantId: tenant.id, slug: p.sku.toLowerCase() + '-' + Date.now().toString(36), currency: 'EGP' },
     });
   }
-  console.log(`${products.length} products created`);
+  console.log(`✅ ${products.length} products created`);
+
+  console.log('\n🎉 Seed completed!\n');
+  console.log('Login: demo@wasslchat.com / demo2026');
+}
+
+main().catch(console.error).finally(() => prisma.$disconnect());
 
   // Demo coupons
   const coupons = await Promise.all([
@@ -60,7 +66,7 @@ async function main() {
     prisma.coupon.upsert({ where: { tenantId_code: { tenantId: tenant.id, code: 'FREESHIP' } }, update: {}, create: { tenantId: tenant.id, code: 'FREESHIP', type: 'FREE_SHIPPING', value: 0, minOrderAmount: 200, isActive: true } }),
     prisma.coupon.upsert({ where: { tenantId_code: { tenantId: tenant.id, code: 'SAVE50' } }, update: {}, create: { tenantId: tenant.id, code: 'SAVE50', type: 'FIXED_AMOUNT', value: 50, minOrderAmount: 300, maxUses: 50, isActive: true } }),
   ]);
-  console.log(`${coupons.length} coupons created (WELCOME10, FREESHIP, SAVE50)`);
+  console.log(`✅ ${coupons.length} coupons created (WELCOME10, FREESHIP, SAVE50)`);
 
   // Demo WhatsApp templates
   await prisma.whatsappTemplate.upsert({
@@ -73,16 +79,16 @@ async function main() {
     update: {},
     create: { tenantId: tenant.id, name: 'payment_reminder', language: 'ar', category: 'UTILITY', body: 'مرحباً {{1}}! طلبك رقم {{2}} في انتظار الدفع. المبلغ: {{3}} ج.م. ادفع الآن عبر فوري بالرقم المرجعي: {{4}}', status: 'APPROVED' },
   });
-  console.log('2 WhatsApp templates created');
+  console.log('✅ 2 WhatsApp templates created');
 
   // Demo quick replies
   await Promise.all([
-    prisma.quickReply.upsert({ where: { tenantId_shortcut: { tenantId: tenant.id, shortcut: '/hello' } }, update: {}, create: { tenantId: tenant.id, shortcut: '/hello', content: 'أهلاً وسهلاً بيك! كيف أقدر أساعدك؟', contentAr: 'أهلاً وسهلاً بيك! كيف أقدر أساعدك؟', category: 'greeting' } }),
-    prisma.quickReply.upsert({ where: { tenantId_shortcut: { tenantId: tenant.id, shortcut: '/hours' } }, update: {}, create: { tenantId: tenant.id, shortcut: '/hours', content: 'مواعيد العمل من ٩ صباحاً لـ ١٠ مساءً، كل أيام الأسبوع', contentAr: 'مواعيد العمل من ٩ صباحاً لـ ١٠ مساءً', category: 'info' } }),
-    prisma.quickReply.upsert({ where: { tenantId_shortcut: { tenantId: tenant.id, shortcut: '/thanks' } }, update: {}, create: { tenantId: tenant.id, shortcut: '/thanks', content: 'شكراً لتسوقك معانا! لو عندك أي سؤال تاني، أنا موجود', contentAr: 'شكراً لتسوقك معانا!', category: 'closing' } }),
-    prisma.quickReply.upsert({ where: { tenantId_shortcut: { tenantId: tenant.id, shortcut: '/shipping' } }, update: {}, create: { tenantId: tenant.id, shortcut: '/shipping', content: 'التوصيل خلال ٢-٣ أيام عمل\nالتكلفة: ٣٥ ج.م داخل القاهرة\n٥٠ ج.م للمحافظات', contentAr: 'التوصيل خلال ٢-٣ أيام عمل', category: 'info' } }),
+    prisma.quickReply.upsert({ where: { tenantId_shortcut: { tenantId: tenant.id, shortcut: '/hello' } }, update: {}, create: { tenantId: tenant.id, shortcut: '/hello', content: 'أهلاً وسهلاً بيك! 🙌 كيف أقدر أساعدك؟', contentAr: 'أهلاً وسهلاً بيك! 🙌 كيف أقدر أساعدك؟', category: 'greeting' } }),
+    prisma.quickReply.upsert({ where: { tenantId_shortcut: { tenantId: tenant.id, shortcut: '/hours' } }, update: {}, create: { tenantId: tenant.id, shortcut: '/hours', content: 'مواعيد العمل من ٩ صباحاً لـ ١٠ مساءً، كل أيام الأسبوع 🕐', contentAr: 'مواعيد العمل من ٩ صباحاً لـ ١٠ مساءً', category: 'info' } }),
+    prisma.quickReply.upsert({ where: { tenantId_shortcut: { tenantId: tenant.id, shortcut: '/thanks' } }, update: {}, create: { tenantId: tenant.id, shortcut: '/thanks', content: 'شكراً لتسوقك معانا! 🙏 لو عندك أي سؤال تاني، أنا موجود', contentAr: 'شكراً لتسوقك معانا!', category: 'closing' } }),
+    prisma.quickReply.upsert({ where: { tenantId_shortcut: { tenantId: tenant.id, shortcut: '/shipping' } }, update: {}, create: { tenantId: tenant.id, shortcut: '/shipping', content: 'التوصيل خلال ٢-٣ أيام عمل 📦\nالتكلفة: ٣٥ ج.م داخل القاهرة\n٥٠ ج.م للمحافظات', contentAr: 'التوصيل خلال ٢-٣ أيام عمل', category: 'info' } }),
   ]);
-  console.log('4 quick replies created (/hello, /hours, /thanks, /shipping)');
+  console.log('✅ 4 quick replies created (/hello, /hours, /thanks, /shipping)');
 
   // Demo tags
   await Promise.all([
@@ -90,7 +96,7 @@ async function main() {
     prisma.tag.upsert({ where: { tenantId_name: { tenantId: tenant.id, name: 'عميل متكرر' } }, update: {}, create: { tenantId: tenant.id, name: 'عميل متكرر', color: '#8b5cf6' } }),
     prisma.tag.upsert({ where: { tenantId_name: { tenantId: tenant.id, name: 'بالجملة' } }, update: {}, create: { tenantId: tenant.id, name: 'بالجملة', nameAr: 'بالجملة', color: '#3b82f6' } }),
   ]);
-  console.log('3 tags created (VIP, عميل متكرر, بالجملة)');
+  console.log('✅ 3 tags created (VIP, عميل متكرر, بالجملة)');
 
   // Demo automation rules
   await prisma.automationRule.create({
@@ -99,10 +105,4 @@ async function main() {
   await prisma.automationRule.create({
     data: { tenantId: tenant.id, name: 'تنبيه مخزون منخفض', event: 'product.low_stock', conditions: [], actions: [{ type: 'notify_owner', message: 'منتج وصل للحد الأدنى' }], isActive: true },
   });
-  console.log('2 automation rules created');
-
-  console.log('\nSeed completed!\n');
-  console.log('Login: demo@wasslchat.com / demo2026');
-}
-
-main().catch(console.error).finally(() => prisma.$disconnect());
+  console.log('✅ 2 automation rules created');

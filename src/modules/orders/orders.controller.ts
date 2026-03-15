@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
+import { CreateOrderDto } from './dto/create-order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantId, CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -21,10 +22,10 @@ export class OrdersController {
   async findOne(@TenantId() tid: string, @Param('id') id: string) { return this.service.findById(tid, id); }
 
   @Post() @ApiOperation({ summary: 'Create order' })
-  async create(@TenantId() tid: string, @Body() dto: any) { return this.service.create(tid, dto); }
+  async create(@TenantId() tid: string, @Body() dto: CreateOrderDto) { return this.service.create(tid, dto); }
 
   @Patch(':id') @ApiOperation({ summary: 'Update order details' })
-  async update(@TenantId() tid: string, @Param('id') id: string, @Body() dto: any) { return this.service.update(tid, id, dto); }
+  async update(@TenantId() tid: string, @Param('id') id: string, @Body() dto: { shippingAddress?: any; customerNotes?: string; internalNotes?: string }) { return this.service.update(tid, id, dto); }
 
   @Patch(':id/status') @ApiOperation({ summary: 'Update order status' })
   async updateStatus(@TenantId() tid: string, @Param('id') id: string, @Body() dto: { status: string }) { return this.service.updateStatus(tid, id, dto.status); }

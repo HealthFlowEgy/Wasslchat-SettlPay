@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AutomationService } from './automation.service';
+import { CreateAutomationDto } from './dto/create-automation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { TenantId } from '../../common/decorators/current-user.decorator';
@@ -17,11 +18,11 @@ export class AutomationController {
 
   @Post() @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Create automation rule' })
-  async create(@TenantId() tid: string, @Body() dto: { name: string; event: string; conditions: any; actions: any }) { return this.service.create(tid, dto); }
+  async create(@TenantId() tid: string, @Body() dto: CreateAutomationDto) { return this.service.create(tid, dto); }
 
   @Patch(':id') @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Update automation rule' })
-  async update(@TenantId() tid: string, @Param('id') id: string, @Body() dto: any) { return this.service.update(tid, id, dto); }
+  async update(@TenantId() tid: string, @Param('id') id: string, @Body() dto: Partial<CreateAutomationDto>) { return this.service.update(tid, id, dto); }
 
   @Patch(':id/toggle') @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Toggle automation rule' })
