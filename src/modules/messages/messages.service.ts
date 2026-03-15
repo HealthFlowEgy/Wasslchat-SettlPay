@@ -1,11 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { WasslChatGateway } from '../websocket/websocket.gateway';
 
 @Injectable()
 export class MessagesService {
   private readonly logger = new Logger(MessagesService.name);
-  constructor(private prisma: PrismaService, private whatsapp: WhatsappService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsapp: WhatsappService,
+    private wsGateway: WasslChatGateway,
+  ) {}
 
   async getByConversation(conversationId: string, query: { page?: number; limit?: number }) {
     const { page = 1, limit = 50 } = query;
@@ -20,15 +25,15 @@ export class MessagesService {
     const conv = await this.prisma.conversation.findFirst({ where: { id: conversationId }, include: { contact: true } });
     if (!conv) throw new Error('Conversation not found');
 
-    // Send via WhatsApp
     const result = await this.whatsapp.sendText(tenantId, conv.contact.phone, text);
-
-    // Store message
     const msg = await this.prisma.message.create({
       data: { conversationId, senderId, direction: 'OUTBOUND', type: 'TEXT', content: text, whatsappMsgId: result?.key?.id },
     });
 
     await this.prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date(), lastMessageText: text.slice(0, 200) } });
+
+    // Real-time push
+    this.wsGateway.emitNewMessage(tenantId, conversationId, msg);
     return msg;
   }
 
@@ -37,8 +42,11 @@ export class MessagesService {
     if (!conv) throw new Error('Conversation not found');
 
     const result = await this.whatsapp.sendMedia(tenantId, conv.contact.phone, mediaUrl, mediaType, caption);
-    return this.prisma.message.create({
+    const msg = await this.prisma.message.create({
       data: { conversationId, senderId, direction: 'OUTBOUND', type: mediaType.toUpperCase() as any, mediaUrl, mediaCaption: caption, whatsappMsgId: result?.key?.id },
     });
+
+    this.wsGateway.emitNewMessage(tenantId, conversationId, msg);
+    return msg;
   }
 }

@@ -9,7 +9,7 @@ import { WasslChatGateway } from './websocket.gateway';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({ secret: config.get('JWT_SECRET', 'wasslchat-secret') }),
+      useFactory: (config: ConfigService) => ({ secret: config.getOrThrow('JWT_SECRET') }),
     }),
   ],
   providers: [WasslChatGateway],

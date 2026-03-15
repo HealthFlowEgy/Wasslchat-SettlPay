@@ -4,6 +4,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
+import { RequestLoggerMiddleware } from './common/middleware/logger.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -20,7 +21,6 @@ import { BroadcastsModule } from './modules/broadcasts/broadcasts.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AiModule } from './modules/ai/ai.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
-import { HealthModule } from './modules/health/health.module';
 import { TagsModule } from './modules/tags/tags.module';
 import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
 import { AutomationModule } from './modules/automation/automation.module';
@@ -31,10 +31,11 @@ import { CouponsModule } from './modules/coupons/coupons.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { WhatsappTemplatesModule } from './modules/whatsapp-templates/whatsapp-templates.module';
 import { WebhookEndpointsModule } from './modules/webhook-endpoints/webhook-endpoints.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env', '.env.local'] }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     ScheduleModule.forRoot(),
     PrismaModule,
@@ -69,9 +70,14 @@ import { WebhookEndpointsModule } from './modules/webhook-endpoints/webhook-endp
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    // Request logging on all routes
+    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+
+    // Tenant context injection (skip public routes)
     consumer.apply(TenantMiddleware).exclude(
       'api/v1/auth/login', 'api/v1/auth/register', 'api/v1/auth/refresh',
-      'api/v1/health(.*)', 'docs(.*)', 'webhooks(.*)',
+      'api/v1/auth/reset-password',
+      'api/v1/health(.*)', 'docs(.*)', 'webhooks(.*)', 'uploads(.*)',
     ).forRoutes('*');
   }
 }
