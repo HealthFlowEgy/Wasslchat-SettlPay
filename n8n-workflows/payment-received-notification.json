@@ -1,0 +1,15 @@
+{
+  "name": "WasslChat - Payment Received Notification",
+  "nodes": [
+    { "name": "Webhook", "type": "n8n-nodes-base.webhook", "position": [250, 300], "parameters": { "httpMethod": "POST", "path": "wasslchat/payment-received" } },
+    { "name": "Send Customer Confirmation", "type": "n8n-nodes-base.httpRequest", "position": [500, 200], "parameters": {
+      "url": "={{ $env.WASSLCHAT_API_URL }}/api/v1/whatsapp/send/text", "method": "POST",
+      "body": { "phone": "={{ $json.customerPhone }}", "text": "✅ تم استلام الدفعة بنجاح!\n\n💳 المبلغ: {{ $json.amount }} ج.م\n📦 رقم الطلب: {{ $json.orderNumber }}\n🧾 طريقة الدفع: {{ $json.method }}\n\nسيتم شحن طلبك قريباً 🚚" }
+    } },
+    { "name": "Send Owner Alert", "type": "n8n-nodes-base.httpRequest", "position": [500, 400], "parameters": {
+      "url": "={{ $env.WASSLCHAT_API_URL }}/api/v1/whatsapp/send/text", "method": "POST",
+      "body": { "phone": "={{ $env.OWNER_PHONE }}", "text": "💰 دفعة جديدة!\n\nالعميل: {{ $json.customerName }}\nالمبلغ: {{ $json.amount }} ج.م\nالطلب: {{ $json.orderNumber }}\nالطريقة: {{ $json.method }}" }
+    } }
+  ],
+  "connections": { "Webhook": { "main": [[{ "node": "Send Customer Confirmation" }, { "node": "Send Owner Alert" }]] } }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "WasslChat - Order Confirmation via WhatsApp",
+  "nodes": [
+    { "name": "Webhook", "type": "n8n-nodes-base.webhook", "position": [250, 300], "parameters": { "httpMethod": "POST", "path": "wasslchat/order-created", "responseMode": "onReceived" } },
+    { "name": "Format Message", "type": "n8n-nodes-base.set", "position": [450, 300], "parameters": { "values": { "string": [
+      { "name": "message", "value": "✅ تم استلام طلبك رقم {{ $json.orderNumber }}\n\n📦 المنتجات:\n{{ $json.items }}\n\n💰 الإجمالي: {{ $json.total }} ج.م\n\n⏳ سيتم معالجة طلبك قريباً\n\nشكراً لتسوقك معنا! 🙏" }
+    ] } } },
+    { "name": "Send WhatsApp", "type": "n8n-nodes-base.httpRequest", "position": [650, 300], "parameters": {
+      "url": "={{ $env.WASSLCHAT_API_URL }}/api/v1/whatsapp/send/text",
+      "method": "POST", "authentication": "genericCredentialType",
+      "body": { "phone": "={{ $json.customerPhone }}", "text": "={{ $json.message }}" }
+    } }
+  ],
+  "connections": { "Webhook": { "main": [[{ "node": "Format Message" }]] }, "Format Message": { "main": [[{ "node": "Send WhatsApp" }]] } }
+}

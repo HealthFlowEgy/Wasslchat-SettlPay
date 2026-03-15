@@ -1,0 +1,18 @@
+{
+  "name": "WasslChat - Low Stock Alert to Owner",
+  "nodes": [
+    { "name": "Schedule", "type": "n8n-nodes-base.scheduleTrigger", "position": [250, 300], "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] } } },
+    { "name": "Get Low Stock", "type": "n8n-nodes-base.httpRequest", "position": [450, 300], "parameters": {
+      "url": "={{ $env.WASSLCHAT_API_URL }}/api/v1/products/low-stock", "method": "GET"
+    } },
+    { "name": "Check Count", "type": "n8n-nodes-base.if", "position": [650, 300], "parameters": { "conditions": { "number": [{ "value1": "={{ $json.length }}", "operation": "larger", "value2": 0 }] } } },
+    { "name": "Format Alert", "type": "n8n-nodes-base.set", "position": [850, 300], "parameters": { "values": { "string": [
+      { "name": "alert", "value": "⚠️ تنبيه مخزون منخفض!\n\nالمنتجات التالية قاربت على النفاد:\n{{ $json.map(p => `• ${p.nameAr || p.name}: ${p.inventoryQuantity} قطعة`).join('\\n') }}\n\nيرجى إعادة التخزين في أقرب وقت 📦" }
+    ] } } },
+    { "name": "Notify Owner", "type": "n8n-nodes-base.httpRequest", "position": [1050, 300], "parameters": {
+      "url": "={{ $env.WASSLCHAT_API_URL }}/api/v1/whatsapp/send/text", "method": "POST",
+      "body": { "phone": "={{ $env.OWNER_PHONE }}", "text": "={{ $json.alert }}" }
+    } }
+  ],
+  "connections": { "Schedule": { "main": [[{ "node": "Get Low Stock" }]] }, "Get Low Stock": { "main": [[{ "node": "Check Count" }]] }, "Check Count": { "main": [[{ "node": "Format Alert" }]] }, "Format Alert": { "main": [[{ "node": "Notify Owner" }]] } }
+}

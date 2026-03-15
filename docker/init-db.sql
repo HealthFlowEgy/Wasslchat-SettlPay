@@ -1,0 +1,14 @@
+CREATE DATABASE evolution;
+CREATE DATABASE n8n;
+GRANT ALL PRIVILEGES ON DATABASE evolution TO wasslchat;
+GRANT ALL PRIVILEGES ON DATABASE n8n TO wasslchat;
+\c wasslchat;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE OR REPLACE FUNCTION current_tenant_id() RETURNS uuid AS $$
+BEGIN
+  RETURN NULLIF(current_setting('app.current_tenant', true), '')::uuid;
+EXCEPTION WHEN OTHERS THEN RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

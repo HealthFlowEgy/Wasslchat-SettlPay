@@ -1,0 +1,815 @@
+// ==================================================================================
+// WasslChat - Complete Database Schema
+// Multi-Tenant WhatsApp Commerce & CRM Platform
+// PostgreSQL + Prisma ORM with Row-Level Security
+// ==================================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [uuidOssp(map: "uuid-ossp"), pgcrypto]
+}
+
+// ======================== ENUMS ========================
+
+enum TenantStatus {
+  ACTIVE
+  TRIAL
+  SUSPENDED
+  CANCELLED
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MANAGER
+  AGENT
+  VIEWER
+}
+
+enum ContactSource {
+  WHATSAPP
+  MANUAL
+  IMPORT
+  WOOCOMMERCE
+  SHOPIFY
+  WEBSITE
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURNED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  EXPIRED
+}
+
+enum PaymentMethod {
+  HEALTHPAY
+  FAWRY
+  VODAFONE_CASH
+  INSTAPAY
+  COD
+  BANK_TRANSFER
+  CARD
+}
+
+enum ShippingProvider {
+  WASSLBOX
+  BOSTA
+  CUSTOM
+  SELF
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  LOCATION
+  CONTACT
+  STICKER
+  TEMPLATE
+  INTERACTIVE
+  REACTION
+  ORDER
+}
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum ChatbotStatus {
+  ACTIVE
+  INACTIVE
+  DRAFT
+}
+
+enum IntegrationType {
+  WOOCOMMERCE
+  SHOPIFY
+  CUSTOM_API
+}
+
+// ======================== PLANS & TENANTS ========================
+
+model Plan {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                  String
+  nameAr                String?  @map("name_ar")
+  slug                  String   @unique
+  priceMonthly          Int      @map("price_monthly")
+  priceYearly           Int?     @map("price_yearly")
+  currency              String   @default("EGP")
+  maxConversations      Int      @map("max_conversations")
+  maxTeamMembers        Int      @map("max_team_members")
+  maxProducts           Int      @map("max_products")
+  maxBroadcastsPerMonth Int      @map("max_broadcasts_per_month") @default(10)
+  maxContacts           Int      @map("max_contacts") @default(1000)
+  features              Json     @default("{}")
+  isActive              Boolean  @default(true) @map("is_active")
+  sortOrder             Int      @default(0) @map("sort_order")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  tenants               Tenant[]
+
+  @@map("plans")
+}
+
+model Tenant {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String
+  nameAr             String?      @map("name_ar")
+  slug               String       @unique
+  domain             String?      @unique
+  whatsappNumber     String?      @map("whatsapp_number")
+  email              String
+  phone              String?
+  logo               String?
+  coverImage         String?      @map("cover_image")
+  description        String?
+  descriptionAr      String?      @map("description_ar")
+  address            String?
+  city               String?
+  governorate        String?
+  settings           Json         @default("{}")
+  businessType       String?      @map("business_type")
+  commercialRegNo    String?      @map("commercial_reg_no")
+  taxId              String?      @map("tax_id")
+  planId             String       @map("plan_id") @db.Uuid
+  plan               Plan         @relation(fields: [planId], references: [id])
+  status             TenantStatus @default(TRIAL)
+  trialEndsAt        DateTime?    @map("trial_ends_at")
+  subscriptionEndsAt DateTime?    @map("subscription_ends_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+  deletedAt          DateTime?    @map("deleted_at")
+
+  // Relations
+  users              User[]
+  contacts           Contact[]
+  categories         Category[]
+  products           Product[]
+  orders             Order[]
+  conversations      Conversation[]
+  chatbotFlows       ChatbotFlow[]
+  broadcasts         Broadcast[]
+  whatsappSessions   WhatsappSession[]
+  paymentTransactions PaymentTransaction[]
+  integrations       Integration[]
+  quickReplies       QuickReply[]
+  tags               Tag[]
+  automationRules    AutomationRule[]
+  notifications      Notification[]
+  coupons            Coupon[]
+  auditLogs          AuditLog[]
+  whatsappTemplates  WhatsappTemplate[]
+  webhookEndpoints   WebhookEndpoint[]
+
+  @@index([slug])
+  @@index([status])
+  @@map("tenants")
+}
+
+// ======================== USERS & AUTH ========================
+
+model User {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email          String
+  passwordHash   String    @map("password_hash")
+  firstName      String    @map("first_name")
+  lastName       String    @map("last_name")
+  firstNameAr    String?   @map("first_name_ar")
+  lastNameAr     String?   @map("last_name_ar")
+  phone          String?
+  avatar         String?
+  role           UserRole  @default(AGENT)
+  isActive       Boolean   @default(true) @map("is_active")
+  lastLoginAt    DateTime? @map("last_login_at")
+  refreshToken   String?   @map("refresh_token")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  assignedConversations Conversation[] @relation("AssignedAgent")
+  messages              Message[]
+  orderNotes            OrderNote[]
+  notifications         Notification[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+// ======================== CONTACTS & CRM ========================
+
+model Contact {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  whatsappId      String?       @map("whatsapp_id")
+  phone           String
+  name            String?
+  nameAr          String?       @map("name_ar")
+  email           String?
+  nationalId      String?       @map("national_id")
+  avatar          String?
+  source          ContactSource @default(WHATSAPP)
+  address         String?
+  city            String?
+  governorate     String?
+  notes           String?
+  customFields    Json          @default("{}") @map("custom_fields")
+  totalOrders     Int           @default(0) @map("total_orders")
+  totalSpent      Float         @default(0) @map("total_spent")
+  lastOrderAt     DateTime?     @map("last_order_at")
+  lastContactedAt DateTime?     @map("last_contacted_at")
+  isBlocked       Boolean       @default(false) @map("is_blocked")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  orders          Order[]
+  conversations   Conversation[]
+  contactTags     ContactTag[]
+
+  @@unique([tenantId, phone])
+  @@unique([tenantId, whatsappId])
+  @@index([tenantId])
+  @@index([tenantId, phone])
+  @@map("contacts")
+}
+
+model Tag {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String       @map("tenant_id") @db.Uuid
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  nameAr      String?      @map("name_ar")
+  color       String       @default("#6366f1")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  contacts    ContactTag[]
+
+  @@unique([tenantId, name])
+  @@map("tags")
+}
+
+model ContactTag {
+  contactId String  @map("contact_id") @db.Uuid
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tagId     String  @map("tag_id") @db.Uuid
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@map("contact_tags")
+}
+
+// ======================== PRODUCTS & CATALOG ========================
+
+model Category {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  nameAr      String?   @map("name_ar")
+  slug        String
+  description String?
+  image       String?
+  parentId    String?   @map("parent_id") @db.Uuid
+  parent      Category? @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  products    Product[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("categories")
+}
+
+model Product {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId         String?   @map("category_id") @db.Uuid
+  category           Category? @relation(fields: [categoryId], references: [id])
+  name               String
+  nameAr             String?   @map("name_ar")
+  slug               String
+  description        String?
+  descriptionAr      String?   @map("description_ar")
+  sku                String?
+  barcode            String?
+  price              Float
+  compareAtPrice     Float?    @map("compare_at_price")
+  costPrice          Float?    @map("cost_price")
+  currency           String    @default("EGP")
+  inventoryQuantity  Int       @default(0) @map("inventory_quantity")
+  lowStockThreshold  Int       @default(5) @map("low_stock_threshold")
+  trackInventory     Boolean   @default(true) @map("track_inventory")
+  weight             Float?
+  images             Json      @default("[]")
+  isFeatured         Boolean   @default(false) @map("is_featured")
+  isActive           Boolean   @default(true) @map("is_active")
+  externalId         String?   @map("external_id")
+  externalSource     String?   @map("external_source")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  variants           ProductVariant[]
+  orderItems         OrderItem[]
+
+  @@unique([tenantId, slug])
+  @@unique([tenantId, sku])
+  @@index([tenantId])
+  @@index([tenantId, categoryId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId         String   @map("product_id") @db.Uuid
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name              String
+  nameAr            String?  @map("name_ar")
+  sku               String?
+  price             Float
+  inventoryQuantity Int      @default(0) @map("inventory_quantity")
+  options           Json     @default("{}")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  orderItems        OrderItem[]
+
+  @@map("product_variants")
+}
+
+// ======================== ORDERS & PAYMENTS ========================
+
+model Order {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String      @map("tenant_id") @db.Uuid
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId       String      @map("contact_id") @db.Uuid
+  contact         Contact     @relation(fields: [contactId], references: [id])
+  orderNumber     String      @map("order_number")
+  status          OrderStatus @default(PENDING)
+  subtotal        Float
+  shippingCost    Float       @default(0) @map("shipping_cost")
+  discount        Float       @default(0)
+  tax             Float       @default(0)
+  total           Float
+  currency        String      @default("EGP")
+  paymentMethod   PaymentMethod? @map("payment_method")
+  paymentStatus   PaymentStatus  @default(PENDING) @map("payment_status")
+  shippingProvider ShippingProvider? @map("shipping_provider")
+  shippingTrackingNo String?  @map("shipping_tracking_no")
+  shippingAddress Json?       @map("shipping_address")
+  customerNotes   String?     @map("customer_notes")
+  internalNotes   String?     @map("internal_notes")
+  conversationId  String?     @map("conversation_id") @db.Uuid
+  externalId      String?     @map("external_id")
+  externalSource  String?     @map("external_source")
+  confirmedAt     DateTime?   @map("confirmed_at")
+  shippedAt       DateTime?   @map("shipped_at")
+  deliveredAt     DateTime?   @map("delivered_at")
+  cancelledAt     DateTime?   @map("cancelled_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  items           OrderItem[]
+  payments        PaymentTransaction[]
+  notes           OrderNote[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, contactId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId     String          @map("order_id") @db.Uuid
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String          @map("product_id") @db.Uuid
+  product     Product         @relation(fields: [productId], references: [id])
+  variantId   String?         @map("variant_id") @db.Uuid
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  name        String
+  nameAr      String?         @map("name_ar")
+  sku         String?
+  quantity    Int
+  unitPrice   Float           @map("unit_price")
+  totalPrice  Float           @map("total_price")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@map("order_items")
+}
+
+model OrderNote {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId   String   @map("order_id") @db.Uuid
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId    String?  @map("user_id") @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id])
+  content   String
+  isPublic  Boolean  @default(false) @map("is_public")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("order_notes")
+}
+
+model PaymentTransaction {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId         String        @map("order_id") @db.Uuid
+  order           Order         @relation(fields: [orderId], references: [id])
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  amount          Float
+  currency        String        @default("EGP")
+  gatewayRef      String?       @map("gateway_ref")
+  gatewayResponse Json?         @map("gateway_response")
+  fawryRefNo      String?       @map("fawry_ref_no")
+  healthpayTxId   String?       @map("healthpay_tx_id")
+  vodafoneCashRef String?       @map("vodafone_cash_ref")
+  paidAt          DateTime?     @map("paid_at")
+  failedAt        DateTime?     @map("failed_at")
+  refundedAt      DateTime?     @map("refunded_at")
+  expiresAt       DateTime?     @map("expires_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([gatewayRef])
+  @@index([fawryRefNo])
+  @@map("payment_transactions")
+}
+
+// ======================== WHATSAPP & CONVERSATIONS ========================
+
+model WhatsappSession {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instanceName  String   @map("instance_name")
+  instanceId    String?  @map("instance_id")
+  status        String   @default("disconnected")
+  phone         String?
+  profileName   String?  @map("profile_name")
+  profilePic    String?  @map("profile_pic")
+  webhookUrl    String?  @map("webhook_url")
+  qrCode        String?  @map("qr_code")
+  apiToken      String?  @map("api_token")
+  connectedAt   DateTime? @map("connected_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, instanceName])
+  @@map("whatsapp_sessions")
+}
+
+model Conversation {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String             @map("tenant_id") @db.Uuid
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId       String             @map("contact_id") @db.Uuid
+  contact         Contact            @relation(fields: [contactId], references: [id])
+  assigneeId      String?            @map("assignee_id") @db.Uuid
+  assignee        User?              @relation("AssignedAgent", fields: [assigneeId], references: [id])
+  status          ConversationStatus @default(OPEN)
+  channel         String             @default("whatsapp")
+  subject         String?
+  lastMessageAt   DateTime?          @map("last_message_at")
+  lastMessageText String?            @map("last_message_text")
+  unreadCount     Int                @default(0) @map("unread_count")
+  isBot           Boolean            @default(false) @map("is_bot")
+  metadata        Json               @default("{}") 
+  resolvedAt      DateTime?          @map("resolved_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  messages        Message[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, contactId])
+  @@index([tenantId, assigneeId])
+  @@map("conversations")
+}
+
+model Message {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId  String           @map("conversation_id") @db.Uuid
+  conversation    Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId        String?          @map("sender_id") @db.Uuid
+  sender          User?            @relation(fields: [senderId], references: [id])
+  direction       MessageDirection
+  type            MessageType      @default(TEXT)
+  content         String?
+  mediaUrl        String?          @map("media_url")
+  mediaType       String?          @map("media_type")
+  mediaCaption    String?          @map("media_caption")
+  whatsappMsgId   String?          @map("whatsapp_msg_id")
+  templateName    String?          @map("template_name")
+  templateParams  Json?            @map("template_params")
+  isRead          Boolean          @default(false) @map("is_read")
+  readAt          DateTime?        @map("read_at")
+  deliveredAt     DateTime?        @map("delivered_at")
+  failedAt        DateTime?        @map("failed_at")
+  failReason      String?          @map("fail_reason")
+  metadata        Json             @default("{}")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@index([whatsappMsgId])
+  @@map("messages")
+}
+
+model QuickReply {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shortcut  String
+  content   String
+  contentAr String?  @map("content_ar")
+  category  String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, shortcut])
+  @@map("quick_replies")
+}
+
+// ======================== CHATBOTS & AUTOMATION ========================
+
+model ChatbotFlow {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  nameAr      String?       @map("name_ar")
+  description String?
+  trigger     String
+  triggerType String        @default("keyword") @map("trigger_type")
+  flowData    Json          @map("flow_data")
+  typebotId   String?       @map("typebot_id")
+  n8nWorkflowId String?     @map("n8n_workflow_id")
+  status      ChatbotStatus @default(DRAFT)
+  priority    Int           @default(0)
+  stats       Json          @default("{\"triggered\": 0, \"completed\": 0}") 
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("chatbot_flows")
+}
+
+model AutomationRule {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  event       String
+  conditions  Json     @default("[]")
+  actions     Json     @default("[]")
+  isActive    Boolean  @default(true) @map("is_active")
+  executionCount Int   @default(0) @map("execution_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, event])
+  @@map("automation_rules")
+}
+
+// ======================== BROADCASTS ========================
+
+model Broadcast {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  templateName  String?         @map("template_name")
+  templateLang  String?         @map("template_lang")
+  content       String?
+  mediaUrl      String?         @map("media_url")
+  audience      Json            @default("{}")
+  status        BroadcastStatus @default(DRAFT)
+  scheduledAt   DateTime?       @map("scheduled_at")
+  startedAt     DateTime?       @map("started_at")
+  completedAt   DateTime?       @map("completed_at")
+  totalRecipients Int           @default(0) @map("total_recipients")
+  sentCount     Int             @default(0) @map("sent_count")
+  deliveredCount Int            @default(0) @map("delivered_count")
+  readCount     Int             @default(0) @map("read_count")
+  failedCount   Int             @default(0) @map("failed_count")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("broadcasts")
+}
+
+// ======================== E-COMMERCE INTEGRATIONS ========================
+
+model Integration {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type          IntegrationType
+  name          String
+  config        Json            @default("{}")
+  storeUrl      String?         @map("store_url")
+  apiKey        String?         @map("api_key")
+  apiSecret     String?         @map("api_secret")
+  webhookSecret String?         @map("webhook_secret")
+  isActive      Boolean         @default(true) @map("is_active")
+  lastSyncAt    DateTime?       @map("last_sync_at")
+  syncErrors    Json            @default("[]") @map("sync_errors")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("integrations")
+}
+
+// ======================== NOTIFICATIONS ========================
+
+enum NotificationType {
+  NEW_ORDER
+  PAYMENT_RECEIVED
+  NEW_CONVERSATION
+  LOW_STOCK
+  BROADCAST_COMPLETE
+  KYC_ALERT
+  SYSTEM
+}
+
+model Notification {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String?          @map("user_id") @db.Uuid
+  user        User?            @relation(fields: [userId], references: [id])
+  type        NotificationType
+  title       String
+  titleAr     String?          @map("title_ar")
+  body        String
+  bodyAr      String?          @map("body_ar")
+  data        Json             @default("{}")
+  isRead      Boolean          @default(false) @map("is_read")
+  readAt      DateTime?        @map("read_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@index([tenantId, userId, isRead])
+  @@map("notifications")
+}
+
+// ======================== COUPONS ========================
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+}
+
+model Coupon {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String     @map("tenant_id") @db.Uuid
+  tenant          Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code            String
+  type            CouponType
+  value           Float
+  currency        String     @default("EGP")
+  minOrderAmount  Float?     @map("min_order_amount")
+  maxDiscount     Float?     @map("max_discount")
+  maxUses         Int?       @map("max_uses")
+  usedCount       Int        @default(0) @map("used_count")
+  startsAt        DateTime?  @map("starts_at")
+  expiresAt       DateTime?  @map("expires_at")
+  isActive        Boolean    @default(true) @map("is_active")
+  applicableProducts Json    @default("[]") @map("applicable_products")
+  applicableCategories Json  @default("[]") @map("applicable_categories")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("coupons")
+}
+
+// ======================== AUDIT LOG ========================
+
+model AuditLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String?  @map("user_id") @db.Uuid
+  action      String
+  resource    String
+  resourceId  String?  @map("resource_id")
+  details     Json     @default("{}")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, resource])
+  @@map("audit_logs")
+}
+
+// ======================== WHATSAPP TEMPLATES ========================
+
+enum TemplateStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WhatsappTemplate {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  language      String         @default("ar")
+  category      String         @default("UTILITY")
+  header        Json?
+  body          String
+  footer        String?
+  buttons       Json           @default("[]")
+  status        TemplateStatus @default(DRAFT)
+  rejectionReason String?      @map("rejection_reason")
+  externalId    String?        @map("external_id")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  @@unique([tenantId, name, language])
+  @@index([tenantId])
+  @@map("whatsapp_templates")
+}
+
+// ======================== WEBHOOK ENDPOINTS ========================
+
+model WebhookEndpoint {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  url         String
+  secret      String
+  events      Json     @default("[]")
+  isActive    Boolean  @default(true) @map("is_active")
+  failCount   Int      @default(0) @map("fail_count")
+  lastTriggeredAt DateTime? @map("last_triggered_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("webhook_endpoints")
+}

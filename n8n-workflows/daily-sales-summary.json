@@ -1,0 +1,17 @@
+{
+  "name": "WasslChat - Daily Sales Summary (10 PM)",
+  "nodes": [
+    { "name": "Schedule", "type": "n8n-nodes-base.scheduleTrigger", "position": [250, 300], "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 22 * * *" }] } } },
+    { "name": "Get Dashboard", "type": "n8n-nodes-base.httpRequest", "position": [450, 300], "parameters": {
+      "url": "={{ $env.WASSLCHAT_API_URL }}/api/v1/analytics/dashboard?period=day", "method": "GET"
+    } },
+    { "name": "Format Summary", "type": "n8n-nodes-base.set", "position": [650, 300], "parameters": { "values": { "string": [
+      { "name": "summary", "value": "📊 ملخص مبيعات اليوم\n\n🛒 الطلبات: {{ $json.orders.total }}\n✅ المكتملة: {{ $json.orders.completed }}\n💰 الإيرادات: {{ $json.revenue.total }} ج.م\n👥 عملاء جدد: {{ $json.contacts.new }}\n💬 محادثات: {{ $json.conversations.total }}\n📬 مفتوحة: {{ $json.conversations.open }}\n\nيوم موفق! 🌟" }
+    ] } } },
+    { "name": "Send to Owner", "type": "n8n-nodes-base.httpRequest", "position": [850, 300], "parameters": {
+      "url": "={{ $env.WASSLCHAT_API_URL }}/api/v1/whatsapp/send/text", "method": "POST",
+      "body": { "phone": "={{ $env.OWNER_PHONE }}", "text": "={{ $json.summary }}" }
+    } }
+  ],
+  "connections": { "Schedule": { "main": [[{ "node": "Get Dashboard" }]] }, "Get Dashboard": { "main": [[{ "node": "Format Summary" }]] }, "Format Summary": { "main": [[{ "node": "Send to Owner" }]] } }
+}
