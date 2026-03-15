@@ -2,11 +2,12 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { HealthPayGateway } from './gateways/healthpay.gateway';
 import { FawryGateway } from './gateways/fawry.gateway';
+import { VodafoneCashGateway } from './gateways/vodafone-cash.gateway';
 
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
-  constructor(private prisma: PrismaService, private healthpay: HealthPayGateway, private fawry: FawryGateway) {}
+  constructor(private prisma: PrismaService, private healthpay: HealthPayGateway, private fawry: FawryGateway, private vodafone: VodafoneCashGateway) {}
 
   async initiatePayment(tenantId: string, orderId: string, method: string) {
     const order = await this.prisma.order.findFirst({ where: { id: orderId, tenantId }, include: { contact: true } });
@@ -20,6 +21,9 @@ export class PaymentsService {
         break;
       case 'FAWRY':
         gatewayResult = await this.fawry.createPayment({ orderId: order.id, amount: order.total, customerPhone: order.contact.phone, customerEmail: order.contact.email });
+        break;
+      case 'VODAFONE_CASH':
+        gatewayResult = await this.vodafone.createPayment({ orderId: order.id, amount: order.total, customerPhone: order.contact.phone });
         break;
       case 'COD':
         gatewayResult = { status: 'pending', reference: `COD-${order.orderNumber}` };
@@ -50,6 +54,8 @@ export class PaymentsService {
       tx = await this.prisma.paymentTransaction.findFirst({ where: { healthpayTxId: payload.transactionId } });
     } else if (provider === 'fawry') {
       tx = await this.prisma.paymentTransaction.findFirst({ where: { fawryRefNo: payload.referenceNumber } });
+    } else if (provider === 'vodafone') {
+      tx = await this.prisma.paymentTransaction.findFirst({ where: { vodafoneCashRef: payload.reference } });
     }
 
     if (!tx) { this.logger.warn(`Payment transaction not found for webhook`); return; }
