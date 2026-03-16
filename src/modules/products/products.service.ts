@@ -26,12 +26,12 @@ export class ProductsService {
     return p;
   }
 
-  async create(tenantId: string, dto: any) {
+  async create(tenantId: string, dto: { name: string; nameAr?: string; description?: string; descriptionAr?: string; price: number; compareAtPrice?: number; costPrice?: number; sku?: string; barcode?: string; categoryId?: string; inventoryQuantity?: number; lowStockThreshold?: number; trackInventory?: boolean; isFeatured?: boolean; images?: string[] }) {
     const slug = slugify(dto.name, { lower: true }) + '-' + Date.now().toString(36);
     return this.prisma.product.create({ data: { ...dto, tenantId, slug }, include: { category: true } });
   }
 
-  async update(tenantId: string, id: string, dto: any) {
+  async update(tenantId: string, id: string, dto: Record<string, unknown>) {
     await this.findById(tenantId, id);
     return this.prisma.product.update({ where: { id }, data: dto, include: { category: true, variants: true } });
   }

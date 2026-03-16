@@ -6,15 +6,22 @@ export class AutomationService {
   private readonly logger = new Logger(AutomationService.name);
   constructor(private prisma: PrismaService) {}
 
-  async findAll(tenantId: string) {
-    return this.prisma.automationRule.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } });
+  async findAll(tenantId: string, query: { page?: number; limit?: number; event?: string } = {}) {
+    const { page = 1, limit = 20, event } = query;
+    const where: any = { tenantId };
+    if (event) where.event = event;
+    const [data, total] = await Promise.all([
+      this.prisma.automationRule.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
+      this.prisma.automationRule.count({ where }),
+    ]);
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async create(tenantId: string, dto: { name: string; event: string; conditions: any; actions: any }) {
     return this.prisma.automationRule.create({ data: { ...dto, tenantId } });
   }
 
-  async update(tenantId: string, id: string, dto: any) {
+  async update(tenantId: string, id: string, dto: { name?: string; event?: string; conditions?: any[]; actions?: any[]; isActive?: boolean }) {
     const rule = await this.prisma.automationRule.findFirst({ where: { id, tenantId } });
     if (!rule) throw new NotFoundException('القاعدة غير موجودة');
     return this.prisma.automationRule.update({ where: { id }, data: dto });

@@ -5,7 +5,8 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 export class QuickRepliesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(tenantId: string, category?: string) {
+  async findAll(tenantId: string, category?: string, query: { page?: number; limit?: number; search?: string } = {}) {
+    const { page = 1, limit = 50, search } = query;
     const where: any = { tenantId };
     if (category) where.category = category;
     return this.prisma.quickReply.findMany({ where, orderBy: { shortcut: 'asc' } });
@@ -21,7 +22,7 @@ export class QuickRepliesService {
     return this.prisma.quickReply.create({ data: { ...dto, tenantId } });
   }
 
-  async update(tenantId: string, id: string, dto: any) {
+  async update(tenantId: string, id: string, dto: { shortcut?: string; content?: string; contentAr?: string; category?: string }) {
     const qr = await this.prisma.quickReply.findFirst({ where: { id, tenantId } });
     if (!qr) throw new NotFoundException('الرد السريع غير موجود');
     return this.prisma.quickReply.update({ where: { id }, data: dto });

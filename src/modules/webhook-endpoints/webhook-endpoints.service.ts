@@ -8,8 +8,13 @@ export class WebhookEndpointsService {
   private readonly logger = new Logger(WebhookEndpointsService.name);
   constructor(private prisma: PrismaService) {}
 
-  async findAll(tenantId: string) {
-    return this.prisma.webhookEndpoint.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } });
+  async findAll(tenantId: string, query: { page?: number; limit?: number } = {}) {
+    const { page = 1, limit = 20 } = query;
+    const [data, total] = await Promise.all([
+      this.prisma.webhookEndpoint.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+      this.prisma.webhookEndpoint.count({ where: { tenantId } }),
+    ]);
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async create(tenantId: string, dto: { url: string; events: string[] }) {
@@ -42,7 +47,6 @@ export class WebhookEndpointsService {
     }
   }
 
-  // Called by other modules to dispatch events to all registered webhooks
   async dispatch(tenantId: string, event: string, data: any) {
     const endpoints = await this.prisma.webhookEndpoint.findMany({ where: { tenantId, isActive: true } });
     for (const ep of endpoints) {

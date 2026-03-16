@@ -11,7 +11,7 @@ export class TenantsService {
     return t;
   }
 
-  async update(id: string, dto: any) {
+  async update(id: string, dto: Record<string, unknown>) {
     return this.prisma.tenant.update({ where: { id }, data: dto });
   }
 

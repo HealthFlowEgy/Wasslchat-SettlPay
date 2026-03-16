@@ -1,39 +1,58 @@
 'use client';
-import React from 'react';
-
-const stats = [
-  { label:'إيرادات اليوم', value:'٨,٤٢٠ ج.م', change:'+18%', color:'text-green-600' },
-  { label:'طلبات اليوم', value:'٤٧', change:'+12%', color:'text-green-600' },
-  { label:'عملاء جدد', value:'١٢', change:'+5%', color:'text-green-600' },
-  { label:'محادثات مفتوحة', value:'٢٣', change:'-8%', color:'text-red-500' },
-  { label:'معدل التحويل', value:'٣.٢%', change:'+0.5%', color:'text-green-600' },
-  { label:'متوسط قيمة الطلب', value:'٣٥٠ ج.م', change:'+15%', color:'text-green-600' },
-];
-
-const topProducts = [
-  { name:'سماعات لاسلكية', sold:45, revenue:'٢٠,٢٥٠ ج.م' },
-  { name:'تي شيرت قطن', sold:38, revenue:'٦,٨٤٠ ج.م' },
-  { name:'ساعة ذكية', sold:22, revenue:'٢٦,٤٠٠ ج.م' },
-  { name:'سيروم فيتامين سي', sold:18, revenue:'٤,٥٠٠ ج.م' },
-  { name:'كريم وجه', sold:15, revenue:'١,٤٢٥ ج.م' },
-];
+import React, { useState, useEffect } from 'react';
+import api from '../../lib/api';
 
 export default function AnalyticsPage() {
+  const [data, setData] = useState<any>(null);
+  const [topProducts, setTopProducts] = useState<any[]>([]);
+  const [period, setPeriod] = useState('month');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      api.getDashboard(period),
+      api.get('/analytics/top-products?limit=5'),
+    ]).then(([dashboard, products]) => {
+      setData(dashboard.data);
+      setTopProducts(products.data || []);
+    }).finally(() => setLoading(false));
+  }, [period]);
+
+  if (loading) return <div className="flex items-center justify-center min-h-[400px]"><div className="h-8 w-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin" /></div>;
+
+  const stats = [
+    { label: 'إيرادات الفترة', value: `${(data?.revenue?.total || 0).toLocaleString()} ج.م`, color: 'text-green-600' },
+    { label: 'الطلبات', value: data?.orders?.total || 0, color: 'text-blue-600' },
+    { label: 'المكتملة', value: data?.orders?.completed || 0, color: 'text-green-600' },
+    { label: 'معدل التحويل', value: `${data?.orders?.conversionRate || 0}%`, color: 'text-purple-600' },
+    { label: 'عملاء جدد', value: data?.contacts?.new || 0, color: 'text-amber-600' },
+    { label: 'محادثات مفتوحة', value: data?.conversations?.open || 0, color: 'text-red-500' },
+  ];
+
   return (
-    <div className="p-6 space-y-6" dir="rtl">
-      <h1 className="text-2xl font-bold text-gray-900">التحليلات</h1>
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        {stats.map((s,i)=>(<div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm"><p className="text-sm text-gray-500">{s.label}</p><p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p><p className={`text-sm font-medium mt-1 ${s.color}`}>{s.change}</p></div>))}
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">التحليلات</h1>
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {[{ v: 'day', l: 'يوم' }, { v: 'week', l: 'أسبوع' }, { v: 'month', l: 'شهر' }].map(p => (
+            <button key={p.v} onClick={() => setPeriod(p.v)} className={`px-3 py-1.5 rounded-md text-sm font-medium ${period === p.v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{p.l}</button>
+          ))}
+        </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-4">أكثر المنتجات مبيعاً</h3>
-          <div className="space-y-3">{topProducts.map((p,i)=>(<div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"><div className="flex items-center gap-3"><span className="text-sm font-bold text-gray-400 w-5">{i+1}</span><span className="text-sm text-gray-900">{p.name}</span></div><div className="text-left"><p className="text-sm font-medium text-gray-900">{p.revenue}</p><p className="text-xs text-gray-400">{p.sold} قطعة</p></div></div>))}</div>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="font-semibold text-gray-900 mb-4">توزيع طرق الدفع</h3>
-          <div className="space-y-3">{[{m:'فوري',pct:42},{m:'HealthPay',pct:28},{m:'الدفع عند الاستلام',pct:20},{m:'فودافون كاش',pct:10}].map((p,i)=>(<div key={i}><div className="flex justify-between text-sm mb-1"><span className="text-gray-600">{p.m}</span><span className="font-medium text-gray-900">{p.pct}%</span></div><div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-green-500 rounded-full" style={{width:`${p.pct}%`}}/></div></div>))}</div>
-        </div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        {stats.map((s, i) => (<div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm"><p className="text-sm text-gray-500">{s.label}</p><p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p></div>))}
+      </div>
+      <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+        <h3 className="font-semibold text-gray-900 mb-4">أكثر المنتجات مبيعاً</h3>
+        {topProducts.length === 0 ? <p className="text-sm text-gray-400">لا توجد بيانات كافية</p> : (
+          <div className="space-y-3">{topProducts.map((p: any, i: number) => (
+            <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+              <div className="flex items-center gap-3"><span className="text-sm font-bold text-gray-400 w-5">{i + 1}</span><span className="text-sm text-gray-900">{p.product?.nameAr || p.product?.name || '-'}</span></div>
+              <div className="text-left"><p className="text-sm font-medium text-gray-900">{(p.totalRevenue || 0).toLocaleString()} ج.م</p><p className="text-xs text-gray-400">{p.totalSold || 0} قطعة</p></div>
+            </div>
+          ))}</div>
+        )}
       </div>
     </div>
   );

@@ -6,15 +6,23 @@ export class ChatbotsService {
   private readonly logger = new Logger(ChatbotsService.name);
   constructor(private prisma: PrismaService) {}
 
-  async findAll(tenantId: string) {
-    return this.prisma.chatbotFlow.findMany({ where: { tenantId }, orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }] });
+  async findAll(tenantId: string, query: { page?: number; limit?: number; search?: string; status?: string } = {}) {
+    const { page = 1, limit = 20, search, status } = query;
+    const where: any = { tenantId };
+    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { trigger: { contains: search, mode: 'insensitive' } }];
+    if (status) where.status = status;
+    const [data, total] = await Promise.all([
+      this.prisma.chatbotFlow.findMany({ where, orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }], skip: (page - 1) * limit, take: limit }),
+      this.prisma.chatbotFlow.count({ where }),
+    ]);
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async create(tenantId: string, dto: { name: string; nameAr?: string; trigger: string; triggerType?: string; flowData: any; typebotId?: string; n8nWorkflowId?: string }) {
     return this.prisma.chatbotFlow.create({ data: { ...dto, tenantId } });
   }
 
-  async update(tenantId: string, id: string, dto: any) {
+  async update(tenantId: string, id: string, dto: { name?: string; nameAr?: string; description?: string; trigger?: string; triggerType?: string; flowData?: any; status?: string }) {
     const flow = await this.prisma.chatbotFlow.findFirst({ where: { id, tenantId } });
     if (!flow) throw new NotFoundException('البوت غير موجود');
     return this.prisma.chatbotFlow.update({ where: { id }, data: dto });
