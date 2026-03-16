@@ -1,26 +1,31 @@
 import { Controller, Post, Body, Param } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
+import { EventBusService } from '../../common/events/event-bus.service';
 
 @Controller('webhooks/payments')
 export class PaymentWebhookController {
-  constructor(private service: PaymentsService) {}
+  constructor(private service: PaymentsService, private events: EventBusService) {}
 
   @Post('healthpay/:tenantId') @ApiExcludeEndpoint()
   async healthpay(@Param('tenantId') tid: string, @Body() body: any) {
-    await this.service.handleWebhook(tid, 'healthpay', body);
+    const result = await this.service.handleWebhook(tid, 'healthpay', body);
+    if (result?.status === 'COMPLETED') await this.events.onPaymentCompleted(tid, result);
+    if (result?.status === 'FAILED') await this.events.onPaymentFailed(tid, result);
     return { received: true };
   }
 
   @Post('fawry/:tenantId') @ApiExcludeEndpoint()
   async fawry(@Param('tenantId') tid: string, @Body() body: any) {
-    await this.service.handleWebhook(tid, 'fawry', body);
+    const result = await this.service.handleWebhook(tid, 'fawry', body);
+    if (result?.status === 'COMPLETED') await this.events.onPaymentCompleted(tid, result);
     return { received: true };
   }
 
   @Post('vodafone/:tenantId') @ApiExcludeEndpoint()
   async vodafone(@Param('tenantId') tid: string, @Body() body: any) {
-    await this.service.handleWebhook(tid, 'vodafone', body);
+    const result = await this.service.handleWebhook(tid, 'vodafone', body);
+    if (result?.status === 'COMPLETED') await this.events.onPaymentCompleted(tid, result);
     return { received: true };
   }
 }

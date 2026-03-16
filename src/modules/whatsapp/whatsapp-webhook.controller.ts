@@ -1,10 +1,10 @@
 import { Controller, Post, Body, Param, Logger } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
+import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { ConversationsService } from '../conversations/conversations.service';
+import { EventBusService } from '../../common/events/event-bus.service';
 
-@ApiTags('Webhooks')
 @Controller('webhooks/whatsapp')
 export class WhatsappWebhookController {
   private readonly logger = new Logger(WhatsappWebhookController.name);
@@ -13,18 +13,14 @@ export class WhatsappWebhookController {
     private prisma: PrismaService,
     private contacts: ContactsService,
     private conversations: ConversationsService,
+    private events: EventBusService,
   ) {}
 
-  @Post(':tenantId')
-  @ApiExcludeEndpoint()
+  @Post(':tenantId') @ApiExcludeEndpoint()
   async handleWebhook(@Param('tenantId') tenantId: string, @Body() body: any) {
     this.logger.debug(`WhatsApp webhook for tenant ${tenantId}: ${body?.event}`);
-
-    if (body?.event === 'messages.upsert') {
-      await this.handleIncomingMessage(tenantId, body.data);
-    } else if (body?.event === 'connection.update') {
-      await this.handleConnectionUpdate(tenantId, body.data);
-    }
+    if (body?.event === 'messages.upsert') await this.handleIncomingMessage(tenantId, body.data);
+    else if (body?.event === 'connection.update') await this.handleConnectionUpdate(tenantId, body.data);
     return { received: true };
   }
 
@@ -41,14 +37,21 @@ export class WhatsappWebhookController {
         name: msg.pushName, whatsappId: msg.key?.remoteJid,
       });
 
+      // Emit contact.created if new
+      if (contact.createdAt && (Date.now() - new Date(contact.createdAt).getTime()) < 5000) {
+        await this.events.onContactCreated(tenantId, contact);
+      }
+
       // Find or create conversation
       const conversation = await this.conversations.findOrCreateForContact(tenantId, contact.id);
+      const isNewConversation = conversation.createdAt && (Date.now() - new Date(conversation.createdAt).getTime()) < 5000;
 
-      // Store message
+      // Extract message content
       const content = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
       const type = msg.message?.imageMessage ? 'IMAGE' : msg.message?.videoMessage ? 'VIDEO' : msg.message?.audioMessage ? 'AUDIO' : msg.message?.documentMessage ? 'DOCUMENT' : 'TEXT';
 
-      await this.prisma.message.create({
+      // Store message
+      const storedMsg = await this.prisma.message.create({
         data: {
           conversationId: conversation.id, direction: 'INBOUND', type: type as any,
           content, whatsappMsgId: msg.key?.id,
@@ -63,10 +66,11 @@ export class WhatsappWebhookController {
       });
 
       // Update contact
-      await this.prisma.contact.update({
-        where: { id: contact.id },
-        data: { lastContactedAt: new Date() },
-      });
+      await this.prisma.contact.update({ where: { id: contact.id }, data: { lastContactedAt: new Date() } });
+
+      // *** EVENT BUS — triggers chatbots, automation, WebSocket, webhooks ***
+      if (isNewConversation) await this.events.onNewConversation(tenantId, conversation);
+      await this.events.onNewInboundMessage(tenantId, conversation.id, contact.id, storedMsg, content);
 
       this.logger.log(`Message stored from ${phone} in conversation ${conversation.id}`);
     } catch (err) {

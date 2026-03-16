@@ -4,11 +4,12 @@ import { UsersService } from './users.service';
 import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
+import { PlanLimitsGuard, PlanLimit } from '../../common/guards/plan-limits.guard';
 import { TenantId } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Users')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanLimitsGuard)
 @Controller('users')
 export class UsersController {
   constructor(private service: UsersService) {}
@@ -21,7 +22,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Get user by ID' })
   async findOne(@TenantId() tid: string, @Param('id') id: string) { return this.service.findById(tid, id); }
 
-  @Post() @Roles('OWNER', 'ADMIN')
+  @Post() @Roles('OWNER', 'ADMIN') @PlanLimit('team_members')
   @ApiOperation({ summary: 'Add team member' })
   async create(@TenantId() tid: string, @Body() dto: CreateUserDto) { return this.service.create(tid, dto); }
 

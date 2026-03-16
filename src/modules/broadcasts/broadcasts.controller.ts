@@ -4,11 +4,12 @@ import { BroadcastsService } from './broadcasts.service';
 import { CreateBroadcastDto } from './dto/create-broadcast.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
+import { PlanLimitsGuard, PlanLimit } from '../../common/guards/plan-limits.guard';
 import { TenantId } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Broadcasts')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PlanLimitsGuard)
 @Controller('broadcasts')
 export class BroadcastsController {
   constructor(private service: BroadcastsService) {}
@@ -16,7 +17,7 @@ export class BroadcastsController {
   @Get() @ApiOperation({ summary: 'List broadcast campaigns' })
   async findAll(@TenantId() tid: string) { return this.service.findAll(tid); }
 
-  @Post() @Roles('OWNER', 'ADMIN', 'MANAGER')
+  @Post() @Roles('OWNER', 'ADMIN', 'MANAGER') @PlanLimit('broadcasts')
   @ApiOperation({ summary: 'Create broadcast campaign' })
   async create(@TenantId() tid: string, @Body() dto: CreateBroadcastDto) { return this.service.create(tid, dto); }
 

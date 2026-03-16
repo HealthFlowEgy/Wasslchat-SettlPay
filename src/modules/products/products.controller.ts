@@ -4,11 +4,12 @@ import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { TenantId } from '../../common/decorators/current-user.decorator';
+import { PlanLimitsGuard, PlanLimit } from '../../common/guards/plan-limits.guard';
+import { TenantId, CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Products')
 @ApiBearerAuth('JWT-auth')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanLimitsGuard)
 @Controller('products')
 export class ProductsController {
   constructor(private service: ProductsService) {}
@@ -25,7 +26,7 @@ export class ProductsController {
   @Get(':id') @ApiOperation({ summary: 'Get product by ID' })
   async findOne(@TenantId() tid: string, @Param('id') id: string) { return this.service.findById(tid, id); }
 
-  @Post() @ApiOperation({ summary: 'Create product' })
+  @Post() @PlanLimit('products') @ApiOperation({ summary: 'Create product' })
   async create(@TenantId() tid: string, @Body() dto: CreateProductDto) { return this.service.create(tid, dto); }
 
   @Patch('bulk') @ApiOperation({ summary: 'Bulk update products' })

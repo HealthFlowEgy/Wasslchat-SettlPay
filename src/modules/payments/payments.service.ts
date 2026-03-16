@@ -58,7 +58,7 @@ export class PaymentsService {
       tx = await this.prisma.paymentTransaction.findFirst({ where: { vodafoneCashRef: payload.reference } });
     }
 
-    if (!tx) { this.logger.warn(`Payment transaction not found for webhook`); return; }
+    if (!tx) { this.logger.warn(`Payment transaction not found for webhook`); return null; }
 
     const status = payload.status === 'PAID' || payload.status === 'completed' ? 'COMPLETED' : payload.status === 'FAILED' || payload.status === 'expired' ? 'FAILED' : 'PROCESSING';
     await this.prisma.paymentTransaction.update({
@@ -71,6 +71,8 @@ export class PaymentsService {
     } else if (status === 'FAILED') {
       await this.prisma.order.update({ where: { id: tx.orderId }, data: { paymentStatus: 'FAILED' } });
     }
+
+    return { ...tx, status, tenantId: tx.tenantId };
   }
 
   async listPayments(tenantId: string, query: { page?: number; limit?: number; status?: string; method?: string; orderId?: string }) {
