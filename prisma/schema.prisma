@@ -201,6 +201,7 @@ model Tenant {
   auditLogs          AuditLog[]
   whatsappTemplates  WhatsappTemplate[]
   webhookEndpoints   WebhookEndpoint[]
+  settlePayWallets   SettlePayWallet[]
 
   @@index([slug])
   @@index([status])
@@ -270,6 +271,7 @@ model Contact {
   orders          Order[]
   conversations   Conversation[]
   contactTags     ContactTag[]
+  settlePayWallets SettlePayWallet[]
 
   @@unique([tenantId, phone])
   @@unique([tenantId, whatsappId])
@@ -812,4 +814,27 @@ model WebhookEndpoint {
 
   @@index([tenantId])
   @@map("webhook_endpoints")
+}
+
+// ======================== SETTLEPAY WALLETS ========================
+
+model SettlePayWallet {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId          String?  @map("contact_id") @db.Uuid
+  contact            Contact? @relation(fields: [contactId], references: [id])
+  ownerType          String   @map("owner_type")  // 'MERCHANT' or 'CUSTOMER'
+  settlePayMemberId  String   @map("settlepay_member_id")
+  settlePayWalletId  String   @unique @map("settlepay_wallet_id")
+  walletType         String   @default("MAIN") @map("wallet_type")
+  currency           String   @default("EGP")
+  label              String?
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, ownerType])
+  @@index([tenantId, contactId])
+  @@map("settlepay_wallets")
 }

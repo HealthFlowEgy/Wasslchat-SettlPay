@@ -9,6 +9,7 @@ const nav = [
   { href: '/chatbots', label: 'البوتات', icon: '🤖' },
   { href: '/broadcasts', label: 'الحملات', icon: '📢' },
   { href: '/automation', label: 'الأتمتة', icon: '⚡' },
+  { href: '/wallet', label: 'المحفظة', icon: '💳' },
   { href: '/analytics', label: 'التحليلات', icon: '📊' },
   { href: '/whatsapp', label: 'واتساب', icon: '📱' },
   { href: '/settings', label: 'الإعدادات', icon: '⚙️' },

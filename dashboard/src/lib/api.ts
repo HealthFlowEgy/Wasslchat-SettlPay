@@ -136,3 +136,15 @@ class ApiClient {
 
 export const api = new ApiClient();
 export default api;
+
+  // SettlePay Wallet
+  setupMerchantWallet() { return this.request('/settlepay/merchant/setup', { method: 'POST' }); }
+  getMerchantWallet() { return this.request('/settlepay/merchant/wallet'); }
+  getMerchantTransactions(params?: string) { return this.request(`/settlepay/merchant/transactions${params ? '?' + params : ''}`); }
+  requestWithdrawal(data: any) { return this.request('/settlepay/merchant/withdraw', { method: 'POST', body: JSON.stringify(data) }); }
+  setupCustomerWallet(contactId: string) { return this.request(`/settlepay/customers/${contactId}/wallet`, { method: 'POST' }); }
+  getCustomerWallet(contactId: string) { return this.request(`/settlepay/customers/${contactId}/wallet`); }
+  topUpCustomerWallet(contactId: string, data: any) { return this.request(`/settlepay/customers/${contactId}/topup`, { method: 'POST', body: JSON.stringify(data) }); }
+  payWithWallet(orderId: string, contactId: string) { return this.request(`/settlepay/pay/${orderId}/wallet`, { method: 'POST', body: JSON.stringify({ contactId }) }); }
+  getPaymentLink(orderId: string) { return this.request(`/settlepay/pay/${orderId}/link`, { method: 'POST' }); }
+  listWallets(type?: string) { return this.request(`/settlepay/wallets${type ? '?type=' + type : ''}`); }

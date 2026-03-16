@@ -33,6 +33,7 @@ import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { WhatsappTemplatesModule } from './modules/whatsapp-templates/whatsapp-templates.module';
 import { WebhookEndpointsModule } from './modules/webhook-endpoints/webhook-endpoints.module';
 import { HealthModule } from './modules/health/health.module';
+import { SettlePayModule } from './modules/settlepay/settlepay.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { HealthModule } from './modules/health/health.module';
     AuditLogModule,
     WhatsappTemplatesModule,
     WebhookEndpointsModule,
+    SettlePayModule,
     HealthModule,
   ],
 })
