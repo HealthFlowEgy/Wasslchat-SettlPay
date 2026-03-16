@@ -40,4 +40,24 @@ export class ProductsController {
 
   @Delete(':id') @ApiOperation({ summary: 'Soft delete product' })
   async delete(@TenantId() tid: string, @Param('id') id: string) { return this.service.delete(tid, id); }
+
+  // ===== PRODUCT VARIANTS =====
+
+  @Get(':id/variants') @ApiOperation({ summary: 'List product variants' })
+  async getVariants(@TenantId() tid: string, @Param('id') id: string) { return this.service.getVariants(tid, id); }
+
+  @Post(':id/variants') @ApiOperation({ summary: 'Create product variant' })
+  async createVariant(@TenantId() tid: string, @Param('id') id: string, @Body() dto: { name: string; nameAr?: string; sku?: string; price: number; inventoryQuantity?: number; options?: any }) {
+    return this.service.createVariant(tid, id, dto);
+  }
+
+  @Patch(':id/variants/:variantId') @ApiOperation({ summary: 'Update product variant' })
+  async updateVariant(@TenantId() tid: string, @Param('id') id: string, @Param('variantId') vid: string, @Body() dto: any) {
+    return this.service.updateVariant(tid, id, vid, dto);
+  }
+
+  @Delete(':id/variants/:variantId') @ApiOperation({ summary: 'Soft-delete product variant' })
+  async deleteVariant(@TenantId() tid: string, @Param('id') id: string, @Param('variantId') vid: string) {
+    return this.service.deleteVariant(tid, id, vid);
+  }
 }

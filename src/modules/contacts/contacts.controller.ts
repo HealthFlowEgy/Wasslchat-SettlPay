@@ -18,6 +18,9 @@ export class ContactsController {
   @Get('export/csv') @ApiOperation({ summary: 'Export contacts as CSV' })
   async exportCsv(@TenantId() tid: string) { return this.service.exportCsv(tid); }
 
+  @Get('duplicates') @ApiOperation({ summary: 'Find potential duplicate contacts' })
+  async findDuplicates(@TenantId() tid: string) { return this.service.findDuplicates(tid); }
+
   @Get(':id') @ApiOperation({ summary: 'Get contact details' })
   async findOne(@TenantId() tid: string, @Param('id') id: string) { return this.service.findById(tid, id); }
 
@@ -38,4 +41,9 @@ export class ContactsController {
 
   @Post(':id/unblock') @HttpCode(HttpStatus.OK) @ApiOperation({ summary: 'Unblock contact' })
   async unblock(@TenantId() tid: string, @Param('id') id: string) { return this.service.unblock(tid, id); }
+
+  @Post('merge') @ApiOperation({ summary: 'Merge two duplicate contacts' })
+  async merge(@TenantId() tid: string, @Body() dto: { primaryId: string; secondaryId: string }) {
+    return this.service.merge(tid, dto.primaryId, dto.secondaryId);
+  }
 }

@@ -63,4 +63,32 @@ export class ProductsService {
     const rows = products.map(p => `${p.nameAr || ''},${p.name},${p.sku || ''},${p.category?.name || ''},${p.price},${p.inventoryQuantity},${p.isActive}`);
     return { csv: [header, ...rows].join('\n'), count: products.length };
   }
+
+  // ===== PRODUCT VARIANTS =====
+
+  async getVariants(tenantId: string, productId: string) {
+    const product = await this.prisma.product.findFirst({ where: { id: productId, tenantId } });
+    if (!product) throw new NotFoundException('المنتج غير موجود');
+    return this.prisma.productVariant.findMany({ where: { productId }, orderBy: { createdAt: 'asc' } });
+  }
+
+  async createVariant(tenantId: string, productId: string, dto: { name: string; nameAr?: string; sku?: string; price: number; inventoryQuantity?: number; options?: Record<string, any> }) {
+    const product = await this.prisma.product.findFirst({ where: { id: productId, tenantId } });
+    if (!product) throw new NotFoundException('المنتج غير موجود');
+    return this.prisma.productVariant.create({
+      data: { productId, name: dto.name, nameAr: dto.nameAr, sku: dto.sku, price: dto.price, inventoryQuantity: dto.inventoryQuantity || 0, options: dto.options || {} },
+    });
+  }
+
+  async updateVariant(tenantId: string, productId: string, variantId: string, dto: Partial<{ name: string; nameAr: string; sku: string; price: number; inventoryQuantity: number; options: Record<string, any>; isActive: boolean }>) {
+    const product = await this.prisma.product.findFirst({ where: { id: productId, tenantId } });
+    if (!product) throw new NotFoundException('المنتج غير موجود');
+    return this.prisma.productVariant.update({ where: { id: variantId }, data: dto });
+  }
+
+  async deleteVariant(tenantId: string, productId: string, variantId: string) {
+    const product = await this.prisma.product.findFirst({ where: { id: productId, tenantId } });
+    if (!product) throw new NotFoundException('المنتج غير موجود');
+    return this.prisma.productVariant.update({ where: { id: variantId }, data: { isActive: false } });
+  }
 }

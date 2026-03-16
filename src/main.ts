@@ -7,11 +7,16 @@ import * as compression from 'compression';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { SanitizePipe } from './common/pipes/sanitize.pipe';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Body size limits
+  app.use(require('express').json({ limit: '5mb' }));
+  app.use(require('express').urlencoded({ extended: true, limit: '5mb' }));
 
   // Security
   app.use(helmet());
@@ -24,7 +29,7 @@ async function bootstrap() {
 
   // API config
   app.setGlobalPrefix(process.env.API_PREFIX || 'api/v1');
-  app.useGlobalPipes(new ValidationPipe({
+  app.useGlobalPipes(new SanitizePipe(), new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
     transform: true,

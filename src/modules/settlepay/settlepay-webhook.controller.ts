@@ -4,8 +4,8 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { WebhookSignatureGuard } from '../../common/guards/webhook-signature.guard';
 
-@UseGuards(WebhookSignatureGuard)
 @Controller('webhooks/settlepay')
+@UseGuards(WebhookSignatureGuard)
 export class SettlePayWebhookController {
   private readonly logger = new Logger(SettlePayWebhookController.name);
 

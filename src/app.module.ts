@@ -6,6 +6,7 @@ import { PrismaModule } from './common/prisma/prisma.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { RequestLoggerMiddleware } from './common/middleware/logger.middleware';
 import { EventBusModule } from './common/events/event-bus.module';
+import { MonitoringModule } from './common/monitoring/monitoring.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -42,6 +43,7 @@ import { SettlePayModule } from './modules/settlepay/settlepay.module';
     ScheduleModule.forRoot(),
     PrismaModule,
     EventBusModule,
+    MonitoringModule,
     AuthModule,
     TenantsModule,
     UsersModule,
@@ -78,7 +80,7 @@ export class AppModule implements NestModule {
     consumer.apply(TenantMiddleware).exclude(
       'api/v1/auth/login', 'api/v1/auth/register', 'api/v1/auth/refresh',
       'api/v1/auth/reset-password',
-      'api/v1/health(.*)', 'docs(.*)', 'webhooks(.*)', 'webhooks/settlepay(.*)', 'uploads(.*)',
+      'api/v1/health(.*)', 'docs(.*)', 'webhooks(.*)', 'uploads(.*)', 'api/v1/settlepay(.*)',
     ).forRoutes('*');
   }
 }

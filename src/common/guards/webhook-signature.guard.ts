@@ -27,10 +27,10 @@ export class WebhookSignatureGuard implements CanActivate {
       return this.verifyHealthPay(request);
     } else if (path.includes('/webhooks/payments/vodafone')) {
       return this.verifyVodafone(request);
-    } else if (path.includes('/webhooks/settlepay')) {
-      return this.verifySettlePay(request);
     } else if (path.includes('/webhooks/whatsapp')) {
       return this.verifyEvolution(request);
+    } else if (path.includes('/webhooks/settlepay')) {
+      return this.verifySettlePay(request);
     }
 
     // Unknown webhook path — allow in dev, block in prod
@@ -100,29 +100,6 @@ export class WebhookSignatureGuard implements CanActivate {
     return true;
   }
 
-  private verifySettlePay(request: any): boolean {
-    const secret = this.config.get('SETTLEPAY_WEBHOOK_SECRET');
-    if (!secret) {
-      this.logger.warn('SETTLEPAY_WEBHOOK_SECRET not configured — skipping verification');
-      return true;
-    }
-
-    const signature = request.headers['x-settlepay-signature'] || request.headers['x-webhook-signature'];
-    if (!signature) {
-      this.logger.warn('SettlePay webhook missing signature header');
-      return this.config.get('NODE_ENV') !== 'production';
-    }
-
-    const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
-    const computed = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-
-    if (computed !== signature) {
-      this.logger.warn('SettlePay webhook signature mismatch');
-      throw new UnauthorizedException('Invalid SettlePay webhook signature');
-    }
-    return true;
-  }
-
   private verifyEvolution(request: any): boolean {
     const expectedKey = this.config.get('EVOLUTION_API_KEY');
     if (!expectedKey) {
@@ -139,6 +116,29 @@ export class WebhookSignatureGuard implements CanActivate {
     if (providedKey !== expectedKey) {
       this.logger.warn('Evolution API webhook key mismatch');
       throw new UnauthorizedException('Invalid Evolution API key');
+    }
+    return true;
+  }
+
+  private verifySettlePay(request: any): boolean {
+    const secret = this.config.get('SETTLEPAY_WEBHOOK_SECRET');
+    if (!secret) {
+      this.logger.warn('SETTLEPAY_WEBHOOK_SECRET not configured — skipping verification');
+      return this.config.get('NODE_ENV') !== 'production';
+    }
+
+    const signature = request.headers['x-settlepay-signature'] || request.headers['x-healthpay-signature'] || request.headers['x-webhook-signature'];
+    if (!signature) {
+      this.logger.warn('SettlePay webhook missing signature header');
+      return this.config.get('NODE_ENV') !== 'production';
+    }
+
+    const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
+    const computed = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+
+    if (computed !== signature) {
+      this.logger.warn('SettlePay webhook signature mismatch');
+      throw new UnauthorizedException('Invalid SettlePay webhook signature');
     }
     return true;
   }

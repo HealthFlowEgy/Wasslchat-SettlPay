@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
+import { OrderInvoiceService } from './order-invoice.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantId, CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -10,7 +11,7 @@ import { TenantId, CurrentUser } from '../../common/decorators/current-user.deco
 @UseGuards(JwtAuthGuard)
 @Controller('orders')
 export class OrdersController {
-  constructor(private service: OrdersService) {}
+  constructor(private service: OrdersService, private invoiceService: OrderInvoiceService) {}
 
   @Get() @ApiOperation({ summary: 'List orders' })
   async findAll(@TenantId() tid: string, @Query() query: any) { return this.service.findAll(tid, query); }
@@ -20,6 +21,12 @@ export class OrdersController {
 
   @Get(':id') @ApiOperation({ summary: 'Get order details' })
   async findOne(@TenantId() tid: string, @Param('id') id: string) { return this.service.findById(tid, id); }
+
+  @Get(':id/invoice') @ApiOperation({ summary: 'Generate order invoice as HTML (use print-to-PDF in browser)' })
+  async invoice(@TenantId() tid: string, @Param('id') id: string) {
+    const html = await this.invoiceService.generateInvoiceHtml(tid, id);
+    return { html, contentType: 'text/html' };
+  }
 
   @Post() @ApiOperation({ summary: 'Create order' })
   async create(@TenantId() tid: string, @CurrentUser('sub') uid: string, @Body() dto: CreateOrderDto) { return this.service.create(tid, dto, uid); }

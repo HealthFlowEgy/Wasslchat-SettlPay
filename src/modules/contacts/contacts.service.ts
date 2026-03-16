@@ -89,4 +89,53 @@ export class ContactsService {
     const rows = contacts.map(c => `${c.name || ''},${c.phone},${c.email || ''},${c.city || ''},${c.governorate || ''},${c.totalOrders},${c.totalSpent},${c.source},${c.createdAt.toISOString().split('T')[0]}`);
     return { csv: [header, ...rows].join('\n'), count: contacts.length };
   }
+
+  /** Merge duplicate contacts — keeps primary, moves orders/conversations, deletes secondary */
+  async merge(tenantId: string, primaryId: string, secondaryId: string) {
+    const [primary, secondary] = await Promise.all([
+      this.prisma.contact.findFirst({ where: { id: primaryId, tenantId } }),
+      this.prisma.contact.findFirst({ where: { id: secondaryId, tenantId } }),
+    ]);
+    if (!primary) throw new NotFoundException('جهة الاتصال الأساسية غير موجودة');
+    if (!secondary) throw new NotFoundException('جهة الاتصال المكررة غير موجودة');
+    // Move all secondary's data to primary
+    await this.prisma.$transaction([
+      this.prisma.order.updateMany({ where: { contactId: secondaryId }, data: { contactId: primaryId } }),
+      this.prisma.conversation.updateMany({ where: { contactId: secondaryId }, data: { contactId: primaryId } }),
+      this.prisma.contactTag.updateMany({ where: { contactId: secondaryId }, data: { contactId: primaryId } }),
+      // Merge stats
+      this.prisma.contact.update({
+        where: { id: primaryId },
+        data: {
+          totalOrders: primary.totalOrders + secondary.totalOrders,
+          totalSpent: primary.totalSpent + secondary.totalSpent,
+          email: primary.email || secondary.email,
+          name: primary.name || secondary.name,
+          nameAr: primary.nameAr || secondary.nameAr,
+          address: primary.address || secondary.address,
+          city: primary.city || secondary.city,
+          notes: [primary.notes, secondary.notes, `[دمج مع ${secondary.phone}]`].filter(Boolean).join(' | '),
+        },
+      }),
+      // Soft-delete secondary
+      this.prisma.contact.update({ where: { id: secondaryId }, data: { isBlocked: true, notes: `[مدمج مع ${primary.phone}]` } }),
+    ]);
+    return this.prisma.contact.findFirst({ where: { id: primaryId }, include: { _count: { select: { orders: true, conversations: true } } } });
+  }
+
+  /** Find potential duplicates by phone similarity */
+  async findDuplicates(tenantId: string) {
+    const contacts = await this.prisma.contact.findMany({ where: { tenantId, isBlocked: false }, select: { id: true, name: true, phone: true, email: true, totalOrders: true } });
+    const dupes: { primary: any; secondary: any; reason: string }[] = [];
+    for (let i = 0; i < contacts.length; i++) {
+      for (let j = i + 1; j < contacts.length; j++) {
+        const a = contacts[i], b = contacts[j];
+        const phoneA = a.phone.replace(/[\s\-\+]/g, '').slice(-10);
+        const phoneB = b.phone.replace(/[\s\-\+]/g, '').slice(-10);
+        if (phoneA === phoneB) dupes.push({ primary: a, secondary: b, reason: 'نفس رقم الهاتف' });
+        else if (a.email && a.email === b.email) dupes.push({ primary: a, secondary: b, reason: 'نفس البريد الإلكتروني' });
+      }
+    }
+    return dupes;
+  }
 }

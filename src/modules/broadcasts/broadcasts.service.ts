@@ -6,11 +6,7 @@ import { EventBusService } from '../../common/events/event-bus.service';
 @Injectable()
 export class BroadcastsService {
   private readonly logger = new Logger(BroadcastsService.name);
-  constructor(
-    private prisma: PrismaService,
-    private whatsapp: WhatsappService,
-    private events: EventBusService,
-  ) {}
+  constructor(private prisma: PrismaService, private whatsapp: WhatsappService, private events: EventBusService) {}
 
   async findAll(tenantId: string) {
     return this.prisma.broadcast.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } });
@@ -53,10 +49,7 @@ export class BroadcastsService {
     }
 
     const completed = await this.prisma.broadcast.update({ where: { id }, data: { status: 'COMPLETED', sentCount: sent, failedCount: failed, completedAt: new Date() } });
-
-    // Fire EventBus completion event — triggers notifications + external webhooks
     await this.events.onBroadcastCompleted(tenantId, completed);
-
     return completed;
   }
 

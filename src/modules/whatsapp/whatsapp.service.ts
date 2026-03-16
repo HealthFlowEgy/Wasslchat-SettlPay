@@ -7,11 +7,15 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
   private api: AxiosInstance;
+  private readonly evoUrl: string;
+  private readonly evoKey: string;
 
   constructor(private prisma: PrismaService, private config: ConfigService) {
+    this.evoUrl = config.get('EVOLUTION_API_URL', 'http://localhost:8080');
+    this.evoKey = config.get('EVOLUTION_API_KEY', '');
     this.api = axios.create({
-      baseURL: config.get('EVOLUTION_API_URL', 'http://localhost:8080'),
-      headers: { apikey: config.get('EVOLUTION_API_KEY', '') },
+      baseURL: this.evoUrl,
+      headers: { apikey: this.evoKey },
     });
   }
 
@@ -84,6 +88,31 @@ export class WhatsappService {
     const catalog = products.map(p => `🛍️ *${p.nameAr || p.name}*\n💰 ${p.price} ${p.currency}\n${p.description || ''}`).join('\n\n---\n\n');
     const text = `📦 *كتالوج المنتجات*\n\n${catalog}\n\n✅ أرسل رقم المنتج للطلب`;
     return this.sendText(tenantId, phone, text);
+  }
+
+  /** Send read receipt (blue checkmarks) to customer via Evolution API */
+  async sendReadReceipt(tenantId: string, remoteJid: string, messageId: string) {
+    const session = await this.getSession(tenantId);
+    if (!session?.instanceName) return;
+    try {
+      await axios.put(`${this.evoUrl}/chat/markMessageAsRead/${session.instanceName}`, {
+        readMessages: [{ remoteJid, id: messageId }],
+      }, { headers: { apikey: this.evoKey }, timeout: 5000 });
+      this.logger.debug(`Read receipt sent for ${messageId} in ${remoteJid}`);
+    } catch (err: any) {
+      this.logger.warn(`Read receipt failed: ${err.message}`);
+    }
+  }
+
+  /** Send typing indicator to customer */
+  async sendTyping(tenantId: string, remoteJid: string, duration = 3000) {
+    const session = await this.getSession(tenantId);
+    if (!session?.instanceName) return;
+    try {
+      await axios.post(`${this.evoUrl}/chat/sendPresence/${session.instanceName}`, {
+        number: remoteJid, presence: 'composing', delay: duration,
+      }, { headers: { apikey: this.evoKey }, timeout: 5000 });
+    } catch {}
   }
 
   // Helpers
