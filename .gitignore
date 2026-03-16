@@ -36,12 +36,11 @@ yarn-error.log*
 # Testing
 coverage/
 
-# Uploads (user-generated content)
-uploads/
+# Uploads (user-generated content — root level only)
+/uploads/
 
 # Misc
 *.tgz
 .eslintcache
 .cache/
 tmp/
-uploads/
