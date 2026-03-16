@@ -1,8 +1,10 @@
-import { Controller, Post, Body, Param, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Param, Logger, UseGuards } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { WebhookSignatureGuard } from '../../common/guards/webhook-signature.guard';
 
+@UseGuards(WebhookSignatureGuard)
 @Controller('webhooks/settlepay')
 export class SettlePayWebhookController {
   private readonly logger = new Logger(SettlePayWebhookController.name);

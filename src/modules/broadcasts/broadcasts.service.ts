@@ -1,11 +1,16 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { EventBusService } from '../../common/events/event-bus.service';
 
 @Injectable()
 export class BroadcastsService {
   private readonly logger = new Logger(BroadcastsService.name);
-  constructor(private prisma: PrismaService, private whatsapp: WhatsappService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsapp: WhatsappService,
+    private events: EventBusService,
+  ) {}
 
   async findAll(tenantId: string) {
     return this.prisma.broadcast.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } });
@@ -47,7 +52,12 @@ export class BroadcastsService {
       await new Promise(r => setTimeout(r, 100));
     }
 
-    return this.prisma.broadcast.update({ where: { id }, data: { status: 'COMPLETED', sentCount: sent, failedCount: failed, completedAt: new Date() } });
+    const completed = await this.prisma.broadcast.update({ where: { id }, data: { status: 'COMPLETED', sentCount: sent, failedCount: failed, completedAt: new Date() } });
+
+    // Fire EventBus completion event — triggers notifications + external webhooks
+    await this.events.onBroadcastCompleted(tenantId, completed);
+
+    return completed;
   }
 
   async cancel(tenantId: string, id: string) {

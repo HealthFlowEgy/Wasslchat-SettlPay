@@ -78,7 +78,7 @@ export class AppModule implements NestModule {
     consumer.apply(TenantMiddleware).exclude(
       'api/v1/auth/login', 'api/v1/auth/register', 'api/v1/auth/refresh',
       'api/v1/auth/reset-password',
-      'api/v1/health(.*)', 'docs(.*)', 'webhooks(.*)', 'uploads(.*)',
+      'api/v1/health(.*)', 'docs(.*)', 'webhooks(.*)', 'webhooks/settlepay(.*)', 'uploads(.*)',
     ).forRoutes('*');
   }
 }

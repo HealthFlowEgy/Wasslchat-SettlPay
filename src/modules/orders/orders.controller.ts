@@ -22,7 +22,7 @@ export class OrdersController {
   async findOne(@TenantId() tid: string, @Param('id') id: string) { return this.service.findById(tid, id); }
 
   @Post() @ApiOperation({ summary: 'Create order' })
-  async create(@TenantId() tid: string, @Body() dto: CreateOrderDto) { return this.service.create(tid, dto); }
+  async create(@TenantId() tid: string, @CurrentUser('sub') uid: string, @Body() dto: CreateOrderDto) { return this.service.create(tid, dto, uid); }
 
   @Patch(':id') @ApiOperation({ summary: 'Update order details' })
   async update(@TenantId() tid: string, @Param('id') id: string, @Body() dto: { shippingAddress?: any; customerNotes?: string; internalNotes?: string }) { return this.service.update(tid, id, dto); }

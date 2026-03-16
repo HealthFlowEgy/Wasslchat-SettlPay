@@ -1,6 +1,7 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../lib/api';
+import { useWsEvent } from '../lib/websocket';
 
 interface Conversation { id: string; contact: { name?: string; nameAr?: string; phone: string; avatar?: string }; lastMessageText?: string; lastMessageAt?: string; unreadCount: number; status: string; assignee?: { firstName: string } }
 interface Message { id: string; direction: string; type: string; content?: string; mediaUrl?: string; createdAt: string }
@@ -11,6 +12,11 @@ export default function ConversationsPage() {
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<Conversation | null>(null);
+
+  // Keep ref in sync with state for WebSocket handler
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
 
   useEffect(() => {
     api.getConversations().then(res => {
@@ -25,6 +31,50 @@ export default function ConversationsPage() {
       setMessages(res.data?.messages || []);
     });
   }, [selected?.id]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Real-time: listen for new inbound messages via WebSocket
+  const handleNewMessage = useCallback((data: any) => {
+    const msg = data?.message || data;
+    // If the message belongs to the currently selected conversation, append it
+    if (selectedRef.current && msg.conversationId === selectedRef.current.id) {
+      setMessages(prev => {
+        // Prevent duplicates
+        if (prev.some(m => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+    }
+    // Update conversation list — move conversation to top and update preview
+    setConversations(prev => {
+      const convId = msg.conversationId;
+      const idx = prev.findIndex(c => c.id === convId);
+      if (idx === -1) return prev;
+      const updated = [...prev];
+      const conv = { ...updated[idx], lastMessageText: msg.content || '', lastMessageAt: msg.createdAt || new Date().toISOString() };
+      if (selectedRef.current?.id !== convId) {
+        conv.unreadCount = (conv.unreadCount || 0) + 1;
+      }
+      updated.splice(idx, 1);
+      return [conv, ...updated];
+    });
+  }, []);
+
+  // Real-time: listen for new orders via WebSocket (update conversation list badge)
+  const handleNewOrder = useCallback((data: any) => {
+    // Refresh conversations to pick up any new order-related messages
+    api.getConversations().then(res => {
+      setConversations(res.data?.data || []);
+    }).catch(() => {});
+  }, []);
+
+  // Wire WebSocket events
+  useWsEvent('message.inbound', handleNewMessage);
+  useWsEvent('message.outbound', handleNewMessage);
+  useWsEvent('order.created', handleNewOrder);
 
   const handleSend = async () => {
     if (!input.trim() || !selected) return;
@@ -58,7 +108,7 @@ export default function ConversationsPage() {
         <div className="flex-1 overflow-y-auto">
           {conversations.length === 0 && <p className="p-4 text-sm text-gray-400 text-center">لا توجد محادثات بعد</p>}
           {conversations.map(conv => (
-            <button key={conv.id} onClick={() => setSelected(conv)} className={`w-full flex items-center gap-3 p-3 border-b border-gray-50 hover:bg-gray-50 text-right ${selected?.id === conv.id ? 'bg-green-50' : ''}`}>
+            <button key={conv.id} onClick={() => { setSelected(conv); setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unreadCount: 0 } : c)); }} className={`w-full flex items-center gap-3 p-3 border-b border-gray-50 hover:bg-gray-50 text-right ${selected?.id === conv.id ? 'bg-green-50' : ''}`}>
               <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${conv.unreadCount > 0 ? 'bg-green-500' : 'bg-gray-300'}`}>{(conv.contact?.name || conv.contact?.phone || '?')[0]}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between"><span className="text-sm font-medium text-gray-900 truncate">{conv.contact?.name || conv.contact?.phone}</span><span className="text-xs text-gray-400">{formatTime(conv.lastMessageAt || '')}</span></div>
@@ -86,6 +136,7 @@ export default function ConversationsPage() {
                 </div>
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
           <div className="p-3 bg-white border-t border-gray-200 shrink-0">
             <div className="flex items-center gap-2">

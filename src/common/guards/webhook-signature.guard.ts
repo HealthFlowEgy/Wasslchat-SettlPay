@@ -27,6 +27,8 @@ export class WebhookSignatureGuard implements CanActivate {
       return this.verifyHealthPay(request);
     } else if (path.includes('/webhooks/payments/vodafone')) {
       return this.verifyVodafone(request);
+    } else if (path.includes('/webhooks/settlepay')) {
+      return this.verifySettlePay(request);
     } else if (path.includes('/webhooks/whatsapp')) {
       return this.verifyEvolution(request);
     }
@@ -94,6 +96,29 @@ export class WebhookSignatureGuard implements CanActivate {
     if (!ref) {
       this.logger.warn('Vodafone webhook missing reference');
       return this.config.get('NODE_ENV') !== 'production';
+    }
+    return true;
+  }
+
+  private verifySettlePay(request: any): boolean {
+    const secret = this.config.get('SETTLEPAY_WEBHOOK_SECRET');
+    if (!secret) {
+      this.logger.warn('SETTLEPAY_WEBHOOK_SECRET not configured — skipping verification');
+      return true;
+    }
+
+    const signature = request.headers['x-settlepay-signature'] || request.headers['x-webhook-signature'];
+    if (!signature) {
+      this.logger.warn('SettlePay webhook missing signature header');
+      return this.config.get('NODE_ENV') !== 'production';
+    }
+
+    const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
+    const computed = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+
+    if (computed !== signature) {
+      this.logger.warn('SettlePay webhook signature mismatch');
+      throw new UnauthorizedException('Invalid SettlePay webhook signature');
     }
     return true;
   }
