@@ -49,4 +49,19 @@ export class MessagesService {
     this.wsGateway.emitNewMessage(tenantId, conversationId, msg);
     return msg;
   }
+
+  async search(tenantId: string, query: string, page = 1, limit = 20) {
+    const where = {
+      conversation: { tenantId },
+      content: { contains: query, mode: 'insensitive' as any },
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.message.findMany({
+        where, include: { conversation: { select: { id: true, contact: { select: { name: true, phone: true } } } } },
+        orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit,
+      }),
+      this.prisma.message.count({ where }),
+    ]);
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  }
 }

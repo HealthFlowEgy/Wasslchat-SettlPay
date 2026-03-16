@@ -53,4 +53,17 @@ export class ConversationsService {
     await this.prisma.message.updateMany({ where: { conversationId: id, isRead: false }, data: { isRead: true, readAt: new Date() } });
     return this.prisma.conversation.update({ where: { id }, data: { unreadCount: 0 } });
   }
+
+  async transfer(tenantId: string, id: string, fromAgentId: string, toAgentId: string, note?: string) {
+    const conv = await this.prisma.conversation.findFirst({ where: { id, tenantId } });
+    if (!conv) throw new NotFoundException('المحادثة غير موجودة');
+    await this.prisma.conversation.update({ where: { id }, data: { assigneeId: toAgentId } });
+    // Add internal note about transfer
+    if (note) {
+      await this.prisma.message.create({
+        data: { conversationId: id, direction: 'OUTBOUND', type: 'TEXT', content: `[تم تحويل المحادثة] ${note}`, metadata: { type: 'system', transferFrom: fromAgentId, transferTo: toAgentId } },
+      });
+    }
+    return this.findById(tenantId, id);
+  }
 }

@@ -51,6 +51,7 @@ async function bootstrap() {
   }
 
   const port = process.env.PORT || 3001;
+  app.enableShutdownHooks();
   await app.listen(port);
   logger.log(`🚀 WasslChat API running on http://localhost:${port}`);
   logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);

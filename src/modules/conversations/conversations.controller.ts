@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Param, Query, Body, UseGuards } from '@ne
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ConversationsService } from './conversations.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { TenantId } from '../../common/decorators/current-user.decorator';
+import { TenantId, CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Conversations')
 @ApiBearerAuth('JWT-auth')
@@ -25,4 +25,9 @@ export class ConversationsController {
 
   @Post(':id/read') @ApiOperation({ summary: 'Mark as read' })
   async markRead(@TenantId() tid: string, @Param('id') id: string) { return this.service.markAsRead(tid, id); }
+
+  @Post(':id/transfer') @ApiOperation({ summary: 'Transfer conversation to another agent' })
+  async transfer(@TenantId() tid: string, @Param('id') id: string, @CurrentUser('sub') uid: string, @Body() dto: { toAgentId: string; note?: string }) {
+    return this.service.transfer(tid, id, uid, dto.toAgentId, dto.note);
+  }
 }
