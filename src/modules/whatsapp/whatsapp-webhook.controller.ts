@@ -1,11 +1,13 @@
-import { Controller, Post, Body, Param, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Param, Logger, UseGuards } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { ConversationsService } from '../conversations/conversations.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { WebhookSignatureGuard } from '../../common/guards/webhook-signature.guard';
 
 @Controller('webhooks/whatsapp')
+@UseGuards(WebhookSignatureGuard)
 export class WhatsappWebhookController {
   private readonly logger = new Logger(WhatsappWebhookController.name);
 

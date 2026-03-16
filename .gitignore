@@ -14,7 +14,7 @@ dashboard/out/
 
 # Prisma
 .prisma/
-prisma/migrations/**/migration_lock.toml
+# prisma/migrations/**/migration_lock.toml  # Prisma requires this file in version control
 
 # IDE
 .idea/

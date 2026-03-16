@@ -1,9 +1,11 @@
-import { Controller, Post, Body, Param } from '@nestjs/common';
+import { Controller, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { WebhookSignatureGuard } from '../../common/guards/webhook-signature.guard';
 
 @Controller('webhooks/payments')
+@UseGuards(WebhookSignatureGuard)
 export class PaymentWebhookController {
   constructor(private service: PaymentsService, private events: EventBusService) {}
 
