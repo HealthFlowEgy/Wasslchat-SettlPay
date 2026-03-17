@@ -6,7 +6,6 @@ import helmet from 'helmet';
 import * as compression from 'compression';
 import { join } from 'path';
 import { AppModule } from './app.module';
-import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { SanitizePipe } from './common/pipes/sanitize.pipe';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
@@ -35,7 +34,6 @@ async function bootstrap() {
     transform: true,
     transformOptions: { enableImplicitConversion: true },
   }));
-  app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
 
   // Serve uploaded files

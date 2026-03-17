@@ -1,4 +1,4 @@
--e export { AiModule } from './ai.module';
+export { AiModule } from './ai.module';
 export { AiService } from './ai.service';
 export { AiController } from './ai.controller';
 

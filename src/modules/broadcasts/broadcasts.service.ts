@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { UpdateBroadcastDto } from './dto/update-broadcast.dto';
 
 @Injectable()
 export class BroadcastsService {
@@ -57,7 +58,7 @@ export class BroadcastsService {
     return this.prisma.broadcast.update({ where: { id }, data: { status: 'CANCELLED' } });
   }
 
-  async update(tenantId: string, id: string, dto: any) {
+  async update(tenantId: string, id: string, dto: UpdateBroadcastDto) {
     const bc = await this.prisma.broadcast.findFirst({ where: { id, tenantId } });
     if (!bc) throw new NotFoundException('الحملة غير موجودة');
     if (bc.status !== 'DRAFT' && bc.status !== 'SCHEDULED') throw new Error('لا يمكن تعديل حملة تم إرسالها');
@@ -79,5 +80,76 @@ export class BroadcastsService {
       deliveryRate: bc.sentCount > 0 ? ((bc.deliveredCount / bc.sentCount) * 100).toFixed(1) : 0,
       readRate: bc.deliveredCount > 0 ? ((bc.readCount / bc.deliveredCount) * 100).toFixed(1) : 0,
     };
+  }
+
+  /**
+   * Scheduled broadcast processor — called by @Cron every minute.
+   * Picks up SCHEDULED broadcasts whose scheduledAt has passed.
+   * Max 3 retries per campaign — after that, marks as FAILED.
+   */
+  async processScheduledBroadcasts() {
+    const MAX_RETRIES = 3;
+    const now = new Date();
+
+    const due = await this.prisma.broadcast.findMany({
+      where: {
+        status: 'SCHEDULED',
+        scheduledAt: { lte: now },
+        retryCount: { lt: MAX_RETRIES },
+      },
+    });
+
+    if (due.length === 0) return;
+    this.logger.log(`Processing ${due.length} scheduled broadcast(s)`);
+
+    for (const broadcast of due) {
+      try {
+        await this.send(broadcast.tenantId, broadcast.id);
+        this.logger.log(`Scheduled broadcast sent: ${broadcast.name} (${broadcast.id})`);
+      } catch (err) {
+        const newRetry = broadcast.retryCount + 1;
+        const newStatus = newRetry >= MAX_RETRIES ? 'FAILED' : 'SCHEDULED';
+
+        await this.prisma.broadcast.update({
+          where: { id: broadcast.id },
+          data: { retryCount: newRetry, status: newStatus as any },
+        });
+
+        if (newStatus === 'FAILED') {
+          this.logger.error(`Broadcast ${broadcast.name} FAILED after ${MAX_RETRIES} retries: ${err}`);
+          // Notify merchant that their campaign failed
+          await this.events.onBroadcastCompleted(broadcast.tenantId, {
+            ...broadcast, status: 'FAILED', retryCount: newRetry,
+          });
+        } else {
+          this.logger.warn(`Broadcast ${broadcast.name} retry ${newRetry}/${MAX_RETRIES}: ${err}`);
+        }
+      }
+    }
+  }
+
+
+  /** Called by BroadcastSchedulerService every minute. Finds due campaigns and sends them. */
+  async processScheduledBroadcasts() {
+    const now = new Date();
+    const due = await this.prisma.broadcast.findMany({
+      where: { status: 'SCHEDULED', scheduledAt: { lte: now } },
+    });
+
+    for (const broadcast of due) {
+      this.logger.log(`Processing scheduled broadcast: ${broadcast.name} (${broadcast.id})`);
+      try {
+        await this.send(broadcast.tenantId, broadcast.id);
+      } catch (err) {
+        this.logger.error(`Scheduled broadcast ${broadcast.id} failed: ${err}`);
+        // Increment failedCount as a retry counter for the scheduler
+        await this.prisma.broadcast.update({
+          where: { id: broadcast.id },
+          data: { failedCount: { increment: 1 } },
+        });
+      }
+    }
+
+    if (due.length > 0) this.logger.log(`Processed ${due.length} scheduled broadcast(s)`);
   }
 }
