@@ -34,4 +34,24 @@ export class FawryGateway {
       throw err;
     }
   }
+
+  async refund(data: { fawryRefNo: string; amount: number; reason?: string }) {
+    const merchantCode = this.config.get('FAWRY_MERCHANT_CODE');
+    const securityKey = this.config.get('FAWRY_SECURITY_KEY');
+    const baseUrl = this.config.get('FAWRY_BASE_URL', 'https://atfawry.fawrystaging.com');
+
+    const sigString = `${merchantCode}${data.fawryRefNo}${data.amount}${securityKey}`;
+    const signature = crypto.createHash('sha256').update(sigString).digest('hex');
+
+    try {
+      const res = await axios.post(`${baseUrl}/ECommerceWeb/Fawry/payments/refund`, {
+        merchantCode, fawryRefNum: data.fawryRefNo, refundAmount: data.amount,
+        reason: data.reason || 'Customer refund request', signature,
+      });
+      return { success: true, statusCode: res.data.statusCode, refundRef: res.data.referenceNumber };
+    } catch (err: any) {
+      this.logger.error(`Fawry refund error: ${err.message}`);
+      throw err;
+    }
+  }
 }

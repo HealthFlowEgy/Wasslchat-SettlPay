@@ -9,8 +9,20 @@ export class BroadcastsService {
   private readonly logger = new Logger(BroadcastsService.name);
   constructor(private prisma: PrismaService, private whatsapp: WhatsappService, private events: EventBusService) {}
 
-  async findAll(tenantId: string) {
-    return this.prisma.broadcast.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } });
+  async findAll(tenantId: string, query: { page?: number; limit?: number; status?: string } = {}) {
+    const { page = 1, limit = 20, status } = query;
+    const where: any = { tenantId };
+    if (status) where.status = status;
+    const [data, total] = await Promise.all([
+      this.prisma.broadcast.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.broadcast.count({ where }),
+    ]);
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async create(tenantId: string, dto: { name: string; content?: string; templateName?: string; templateLang?: string; mediaUrl?: string; audience: any; scheduledAt?: string }) {
@@ -117,7 +129,6 @@ export class BroadcastsService {
 
         if (newStatus === 'FAILED') {
           this.logger.error(`Broadcast ${broadcast.name} FAILED after ${MAX_RETRIES} retries: ${err}`);
-          // Notify merchant that their campaign failed
           await this.events.onBroadcastCompleted(broadcast.tenantId, {
             ...broadcast, status: 'FAILED', retryCount: newRetry,
           });
@@ -126,30 +137,5 @@ export class BroadcastsService {
         }
       }
     }
-  }
-
-
-  /** Called by BroadcastSchedulerService every minute. Finds due campaigns and sends them. */
-  async processScheduledBroadcasts() {
-    const now = new Date();
-    const due = await this.prisma.broadcast.findMany({
-      where: { status: 'SCHEDULED', scheduledAt: { lte: now } },
-    });
-
-    for (const broadcast of due) {
-      this.logger.log(`Processing scheduled broadcast: ${broadcast.name} (${broadcast.id})`);
-      try {
-        await this.send(broadcast.tenantId, broadcast.id);
-      } catch (err) {
-        this.logger.error(`Scheduled broadcast ${broadcast.id} failed: ${err}`);
-        // Increment failedCount as a retry counter for the scheduler
-        await this.prisma.broadcast.update({
-          where: { id: broadcast.id },
-          data: { failedCount: { increment: 1 } },
-        });
-      }
-    }
-
-    if (due.length > 0) this.logger.log(`Processed ${due.length} scheduled broadcast(s)`);
   }
 }

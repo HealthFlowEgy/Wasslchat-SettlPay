@@ -34,64 +34,97 @@ export class OrdersService {
     const contact = await this.prisma.contact.findFirst({ where: { id: dto.contactId, tenantId } });
     if (!contact) throw new NotFoundException('جهة الاتصال غير موجودة');
 
-    const productIds = dto.items.map(i => i.productId);
-    const products = await this.prisma.product.findMany({ where: { id: { in: productIds }, tenantId } });
-    const productMap = new Map(products.map(p => [p.id, p]));
-
-    let subtotal = 0;
-    const orderItems = dto.items.map(item => {
-      const product = productMap.get(item.productId);
-      if (!product) throw new BadRequestException(`المنتج غير موجود: ${item.productId}`);
-      // Prevent negative stock
-      if (product.trackInventory && product.inventoryQuantity < item.quantity) {
-        throw new BadRequestException(`الكمية غير متوفرة لـ ${product.nameAr || product.name} (المتبقي: ${product.inventoryQuantity})`);
-      }
-      const totalPrice = product.price * item.quantity;
-      subtotal += totalPrice;
-      return { productId: item.productId, variantId: item.variantId, name: product.name, nameAr: product.nameAr, sku: product.sku, quantity: item.quantity, unitPrice: product.price, totalPrice };
-    });
-
-    // Apply coupon
+    // Validate coupon before entering transaction
     let discount = 0;
+    let couponValid = false;
     if (dto.couponCode) {
+      const productIds = dto.items.map(i => i.productId);
+      const products = await this.prisma.product.findMany({ where: { id: { in: productIds }, tenantId } });
+      const productMap = new Map(products.map(p => [p.id, p]));
+      let subtotalPreview = 0;
+      for (const item of dto.items) {
+        const product = productMap.get(item.productId);
+        if (product) subtotalPreview += product.price * item.quantity;
+      }
       try {
-        const validation = await this.coupons.validate(tenantId, dto.couponCode, subtotal);
+        const validation = await this.coupons.validate(tenantId, dto.couponCode, subtotalPreview);
         discount = validation.discount;
-        await this.coupons.redeem(tenantId, dto.couponCode);
+        couponValid = true;
       } catch (err) {
-        this.logger.warn(`Coupon validation failed: ${err}`);
+        // Re-throw coupon errors so the caller knows the coupon is invalid
+        throw new BadRequestException(`كوبون غير صالح: ${(err as any)?.message || err}`);
       }
     }
 
-    const total = subtotal - discount;
-    const orderNumber = `WC-${Date.now().toString(36).toUpperCase()}`;
+    // Use a transaction to prevent inventory race conditions
+    const { order, lowStockProducts } = await this.prisma.$transaction(async (tx) => {
+      const productIds = dto.items.map(i => i.productId);
 
-    const order = await this.prisma.order.create({
-      data: {
-        tenantId, contactId: dto.contactId, orderNumber, subtotal, discount, total,
-        paymentMethod: dto.paymentMethod, shippingAddress: dto.shippingAddress,
-        customerNotes: dto.customerNotes, items: { create: orderItems },
-      },
-      include: { contact: true, items: true },
-    });
+      // Lock rows for update to prevent concurrent overselling
+      const products = await tx.$queryRaw<any[]>`
+        SELECT * FROM "Product"
+        WHERE id = ANY(${productIds}::uuid[])
+          AND "tenantId" = ${tenantId}
+        FOR UPDATE
+      `;
+      const productMap = new Map(products.map((p: any) => [p.id, p]));
 
-    // Update contact stats
-    await this.prisma.contact.update({
-      where: { id: dto.contactId },
-      data: { totalOrders: { increment: 1 }, totalSpent: { increment: total }, lastOrderAt: new Date() },
-    });
+      let subtotal = 0;
+      const orderItems = dto.items.map(item => {
+        const product = productMap.get(item.productId);
+        if (!product) throw new BadRequestException(`المنتج غير موجود: ${item.productId}`);
+        if (product.trackInventory && product.inventoryQuantity < item.quantity) {
+          throw new BadRequestException(`الكمية غير متوفرة لـ ${product.nameAr || product.name} (المتبقي: ${product.inventoryQuantity})`);
+        }
+        const totalPrice = product.price * item.quantity;
+        subtotal += totalPrice;
+        return { productId: item.productId, variantId: item.variantId, name: product.name, nameAr: product.nameAr, sku: product.sku, quantity: item.quantity, unitPrice: product.price, totalPrice };
+      });
 
-    // Decrement inventory + check low stock
-    for (const item of dto.items) {
-      const updated = await this.prisma.product.update({ where: { id: item.productId }, data: { inventoryQuantity: { decrement: item.quantity } } });
-      if (updated.trackInventory && updated.inventoryQuantity <= updated.lowStockThreshold) {
-        await this.events.onLowStock(tenantId, updated);
+      const total = subtotal - discount;
+      const orderNumber = `WC-${Date.now().toString(36).toUpperCase()}`;
+
+      const order = await tx.order.create({
+        data: {
+          tenantId, contactId: dto.contactId, orderNumber, subtotal, discount, total,
+          paymentMethod: dto.paymentMethod, shippingAddress: dto.shippingAddress,
+          customerNotes: dto.customerNotes, items: { create: orderItems },
+        },
+        include: { contact: true, items: true },
+      });
+
+      // Update contact stats
+      await tx.contact.update({
+        where: { id: dto.contactId },
+        data: { totalOrders: { increment: 1 }, totalSpent: { increment: total }, lastOrderAt: new Date() },
+      });
+
+      // Decrement inventory atomically and collect low-stock products
+      const lowStockProducts: any[] = [];
+      for (const item of dto.items) {
+        const updated = await tx.product.update({
+          where: { id: item.productId },
+          data: { inventoryQuantity: { decrement: item.quantity } },
+        });
+        if (updated.trackInventory && updated.inventoryQuantity <= updated.lowStockThreshold) {
+          lowStockProducts.push(updated);
+        }
       }
+
+      return { order, lowStockProducts };
+    });
+
+    // Redeem coupon after successful transaction
+    if (couponValid && dto.couponCode) {
+      try { await this.coupons.redeem(tenantId, dto.couponCode); } catch (err) { this.logger.warn(`Coupon redeem failed post-order: ${err}`); }
     }
 
-    // *** EVENT BUS ***
+    // Fire low-stock events outside the transaction
+    for (const product of lowStockProducts) {
+      await this.events.onLowStock(tenantId, product);
+    }
+
     await this.events.onOrderCreated(tenantId, order, userId);
-
     return order;
   }
 
@@ -107,9 +140,7 @@ export class OrdersService {
 
     const updated = await this.prisma.order.update({ where: { id }, data: { status: status as any, ...timestamps }, include: { contact: true, items: true } });
 
-    // *** EVENT BUS ***
     await this.events.onOrderStatusChanged(tenantId, updated, oldStatus, status, userId);
-
     return updated;
   }
 

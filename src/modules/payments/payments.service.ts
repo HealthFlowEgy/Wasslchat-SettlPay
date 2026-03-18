@@ -88,12 +88,33 @@ export class PaymentsService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async refund(tenantId: string, transactionId: string, amount?: number) {
+  async refund(tenantId: string, transactionId: string, amount?: number, reason?: string) {
     const tx = await this.prisma.paymentTransaction.findFirst({ where: { id: transactionId, tenantId, status: 'COMPLETED' } });
     if (!tx) throw new NotFoundException('المعاملة غير موجودة أو لم تكتمل');
     const refundAmount = amount || tx.amount;
-    // In production: call gateway refund API
-    this.logger.log(`Processing refund of ${refundAmount} ${tx.currency} for tx ${tx.id}`);
+    if (refundAmount > tx.amount) throw new BadRequestException('مبلغ الاسترداد أكبر من المبلغ الأصلي');
+
+    this.logger.log(`Processing refund of ${refundAmount} ${tx.currency} via ${tx.method} for tx ${tx.id}`);
+
+    // Call the appropriate gateway refund API
+    try {
+      switch (tx.method) {
+        case 'FAWRY':
+          if (tx.fawryRefNo) {
+            await this.fawry.refund({ fawryRefNo: tx.fawryRefNo, amount: refundAmount, reason });
+          }
+          break;
+        case 'COD':
+          // COD refunds are handled offline — no gateway call needed
+          break;
+        default:
+          this.logger.warn(`Refund for method ${tx.method} not yet wired to gateway — marking DB only`);
+      }
+    } catch (err: any) {
+      this.logger.error(`Gateway refund failed for tx ${tx.id}: ${err.message}`);
+      throw new BadRequestException(`فشل الاسترداد من بوابة الدفع: ${err.message}`);
+    }
+
     await this.prisma.paymentTransaction.update({ where: { id: tx.id }, data: { status: 'REFUNDED', refundedAt: new Date() } });
     await this.prisma.order.update({ where: { id: tx.orderId }, data: { paymentStatus: 'REFUNDED', status: 'REFUNDED' } });
     return { refunded: true, amount: refundAmount, transactionId: tx.id };

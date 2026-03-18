@@ -3,7 +3,13 @@ import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
-@WebSocketGateway({ cors: { origin: '*' }, namespace: '/ws' })
+const getAllowedOrigins = () => {
+  const origins = process.env.CORS_ORIGINS;
+  if (!origins) return ['http://localhost:3000'];
+  return origins.split(',').map(o => o.trim());
+};
+
+@WebSocketGateway({ cors: { origin: getAllowedOrigins(), credentials: true }, namespace: '/ws' })
 export class WasslChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(WasslChatGateway.name);

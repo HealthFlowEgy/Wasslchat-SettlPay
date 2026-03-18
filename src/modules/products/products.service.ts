@@ -47,9 +47,17 @@ export class ProductsService {
   }
 
   async getLowStock(tenantId: string) {
-    return this.prisma.product.findMany({
-      where: { tenantId, isActive: true, trackInventory: true, inventoryQuantity: { lte: 5 } },
-    });
+    // Compare each product's inventoryQuantity against its own lowStockThreshold
+    return this.prisma.$queryRaw<any[]>`
+      SELECT p.*, c.name AS "categoryName", c."nameAr" AS "categoryNameAr"
+      FROM "Product" p
+      LEFT JOIN "Category" c ON c.id = p."categoryId"
+      WHERE p."tenantId" = ${tenantId}
+        AND p."isActive" = true
+        AND p."trackInventory" = true
+        AND p."inventoryQuantity" <= p."lowStockThreshold"
+      ORDER BY p."inventoryQuantity" ASC
+    `;
   }
 
   async bulkUpdate(tenantId: string, updates: { id: string; data: any }[]) {

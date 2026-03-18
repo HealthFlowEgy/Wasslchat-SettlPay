@@ -4,7 +4,7 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { ChangePasswordDto, ResetPasswordRequestDto } from './dto/change-password.dto';
+import { ChangePasswordDto, ResetPasswordRequestDto, ResetPasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -49,6 +49,12 @@ export class AuthController {
   @Post('reset-password')
   @Throttle({ default: { limit: 3, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Request password reset — 3 per minute' })
-  async resetPassword(@Body() dto: ResetPasswordRequestDto) { return this.authService.requestPasswordReset(dto.email); }
+  @ApiOperation({ summary: 'Request password reset link — 3 per minute' })
+  async requestReset(@Body() dto: ResetPasswordRequestDto) { return this.authService.requestPasswordReset(dto.email); }
+
+  @Post('reset-password/confirm')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirm password reset with token' })
+  async confirmReset(@Body() dto: ResetPasswordDto) { return this.authService.resetPassword(dto.token, dto.newPassword); }
 }

@@ -55,8 +55,9 @@ export class WebhookSignatureGuard implements CanActivate {
     }
 
     const body = request.body;
-    // Fawry signature = SHA-256(merchantCode + merchantRefNum + paymentAmount + orderAmount + orderStatus + createdDate + securityKey)
-    const sigString = `${body.merchantRefNumber}${body.fawryRefNumber}${body.paymentAmount}${body.orderAmount}${body.orderStatus}${body.statusDescription || ''}${secret}`;
+    const merchantCode = this.config.get('FAWRY_MERCHANT_CODE') || '';
+    // Fawry official signature: SHA-256(merchantCode + fawryRefNumber + merchantRefNumber + paymentAmount + orderAmount + orderStatus + statusDescription + securityKey)
+    const sigString = `${merchantCode}${body.fawryRefNumber || ''}${body.merchantRefNumber || ''}${body.paymentAmount || ''}${body.orderAmount || ''}${body.orderStatus || ''}${body.statusDescription || ''}${secret}`;
     const computed = crypto.createHash('sha256').update(sigString).digest('hex');
 
     if (computed !== signature) {

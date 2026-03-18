@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
@@ -111,11 +111,39 @@ export class AuthService {
 
   async requestPasswordReset(email: string) {
     const user = await this.prisma.user.findFirst({ where: { email } });
+    // Always return the same message to prevent email enumeration attacks
     if (!user) return { message: 'إذا كان البريد مسجل، سيتم إرسال رابط إعادة التعيين' };
-    // In production: generate token, send email/SMS
+
     const resetToken = crypto.randomBytes(32).toString('hex');
-    this.logger.log(`Password reset token for ${email}: ${resetToken}`);
+    const resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken, resetTokenExpiresAt },
+    });
+
+    // TODO: In production, send resetToken via email/SMS to the user
+    // Example: await this.mailService.sendPasswordReset(email, resetToken);
+    this.logger.log(`Password reset requested for ${email} — token expires at ${resetTokenExpiresAt.toISOString()}`);
     return { message: 'إذا كان البريد مسجل، سيتم إرسال رابط إعادة التعيين' };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        resetToken: token,
+        resetTokenExpiresAt: { gt: new Date() },
+        isActive: true,
+      },
+    });
+    if (!user) throw new BadRequestException('رمز إعادة التعيين غير صالح أو منتهي الصلاحية');
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, resetToken: null, resetTokenExpiresAt: null, refreshToken: null },
+    });
+    return { message: 'تم إعادة تعيين كلمة المرور بنجاح' };
   }
 
   private async generateTokens(userId: string, tenantId: string, role: string) {
