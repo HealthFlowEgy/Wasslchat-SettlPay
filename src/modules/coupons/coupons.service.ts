@@ -48,7 +48,24 @@ export class CouponsService {
 
   async redeem(tenantId: string, code: string) {
     const coupon = await this.findByCode(tenantId, code);
-    return this.prisma.coupon.update({ where: { id: coupon.id }, data: { usedCount: { increment: 1 } } });
+    // Atomic conditional increment: only bumps usedCount when still within the limit.
+    // This prevents the race condition where two concurrent requests both pass validate()
+    // and both call redeem(), causing the usage cap to be exceeded.
+    const result = await this.prisma.coupon.updateMany({
+      where: {
+        id: coupon.id,
+        isActive: true,
+        OR: [
+          { maxUses: null },
+          { maxUses: { gt: coupon.usedCount } },
+        ],
+      },
+      data: { usedCount: { increment: 1 } },
+    });
+    if (result.count === 0) {
+      throw new BadRequestException('كود الخصم وصل للحد الأقصى من الاستخدام');
+    }
+    return result;
   }
 
   async update(tenantId: string, id: string, dto: UpdateCouponDto) {

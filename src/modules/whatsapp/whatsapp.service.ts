@@ -16,6 +16,8 @@ export class WhatsappService {
     this.api = axios.create({
       baseURL: this.evoUrl,
       headers: { apikey: this.evoKey },
+      // Prevent hanging requests from blocking the event loop
+      timeout: parseInt(config.get('EVOLUTION_API_TIMEOUT', '15000'), 10),
     });
   }
 

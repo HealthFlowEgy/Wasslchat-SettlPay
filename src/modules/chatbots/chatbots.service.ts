@@ -1,5 +1,8 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+
+/** Maximum regex pattern length to mitigate ReDoS via overly complex user-supplied patterns */
+const MAX_REGEX_LENGTH = 200;
 
 @Injectable()
 export class ChatbotsService {
@@ -19,12 +22,15 @@ export class ChatbotsService {
   }
 
   async create(tenantId: string, dto: { name: string; nameAr?: string; trigger: string; triggerType?: string; flowData: any; typebotId?: string; n8nWorkflowId?: string }) {
+    if (dto.triggerType === 'regex') this.validateRegex(dto.trigger);
     return this.prisma.chatbotFlow.create({ data: { ...dto, tenantId } });
   }
 
   async update(tenantId: string, id: string, dto: { name?: string; nameAr?: string; description?: string; trigger?: string; triggerType?: string; flowData?: any; status?: string }) {
     const flow = await this.prisma.chatbotFlow.findFirst({ where: { id, tenantId } });
     if (!flow) throw new NotFoundException('البوت غير موجود');
+    const effectiveType = dto.triggerType ?? flow.triggerType;
+    if (effectiveType === 'regex' && dto.trigger) this.validateRegex(dto.trigger);
     return this.prisma.chatbotFlow.update({ where: { id }, data: dto });
   }
 
@@ -42,11 +48,35 @@ export class ChatbotsService {
 
   async matchTrigger(tenantId: string, message: string): Promise<any | null> {
     const flows = await this.prisma.chatbotFlow.findMany({ where: { tenantId, status: 'ACTIVE' }, orderBy: { priority: 'desc' } });
+    const lowerMsg = message.toLowerCase();
     for (const flow of flows) {
-      if (flow.triggerType === 'keyword' && message.toLowerCase().includes(flow.trigger.toLowerCase())) return flow;
-      if (flow.triggerType === 'regex' && new RegExp(flow.trigger, 'i').test(message)) return flow;
-      if (flow.triggerType === 'starts_with' && message.toLowerCase().startsWith(flow.trigger.toLowerCase())) return flow;
+      try {
+        if (flow.triggerType === 'keyword' && lowerMsg.includes(flow.trigger.toLowerCase())) return flow;
+        if (flow.triggerType === 'starts_with' && lowerMsg.startsWith(flow.trigger.toLowerCase())) return flow;
+        if (flow.triggerType === 'regex') {
+          if (!flow.trigger || flow.trigger.length > MAX_REGEX_LENGTH) continue;
+          if (new RegExp(flow.trigger, 'i').test(message)) return flow;
+        }
+      } catch {
+        // Malformed regex persisted in DB — log and skip rather than crashing the whole chain
+        this.logger.warn(`Skipping chatbot ${flow.id} — invalid regex pattern: "${flow.trigger}"`);
+      }
     }
     return null;
+  }
+
+  /** Validates a user-supplied regex before persisting to prevent ReDoS at match time */
+  private validateRegex(pattern: string): void {
+    if (!pattern?.trim()) throw new BadRequestException('نمط Regex لا يمكن أن يكون فارغاً');
+    if (pattern.length > MAX_REGEX_LENGTH) throw new BadRequestException(`نمط Regex أطول من الحد المسموح (${MAX_REGEX_LENGTH} حرف)`);
+    try {
+      new RegExp(pattern, 'i');
+    } catch {
+      throw new BadRequestException('نمط Regex غير صالح');
+    }
+    // Detect known catastrophic backtracking structures: (a+)+ / (a*)* / (.+)+ etc.
+    if (/(\([^)]*[+*]\)[+*])/.test(pattern)) {
+      throw new BadRequestException('نمط Regex يحتوي على تعبير قد يسبب تأخيراً كبيراً في المعالجة');
+    }
   }
 }

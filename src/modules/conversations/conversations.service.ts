@@ -40,16 +40,27 @@ export class ConversationsService {
   }
 
   async assign(tenantId: string, id: string, assigneeId: string) {
+    // Verify tenant ownership before updating to prevent cross-tenant assignment
+    const conv = await this.prisma.conversation.findFirst({ where: { id, tenantId } });
+    if (!conv) throw new NotFoundException('المحادثة غير موجودة');
+    // Verify the assignee belongs to the same tenant
+    const agent = await this.prisma.user.findFirst({ where: { id: assigneeId, tenantId, isActive: true } });
+    if (!agent) throw new NotFoundException('المستخدم غير موجود أو غير نشط');
     return this.prisma.conversation.update({ where: { id }, data: { assigneeId } });
   }
 
   async updateStatus(tenantId: string, id: string, status: string) {
+    const conv = await this.prisma.conversation.findFirst({ where: { id, tenantId } });
+    if (!conv) throw new NotFoundException('المحادثة غير موجودة');
     const data: any = { status };
     if (status === 'RESOLVED') data.resolvedAt = new Date();
     return this.prisma.conversation.update({ where: { id }, data });
   }
 
   async markAsRead(tenantId: string, id: string) {
+    // Verify ownership before bulk-updating messages
+    const conv = await this.prisma.conversation.findFirst({ where: { id, tenantId } });
+    if (!conv) throw new NotFoundException('المحادثة غير موجودة');
     await this.prisma.message.updateMany({ where: { conversationId: id, isRead: false }, data: { isRead: true, readAt: new Date() } });
     return this.prisma.conversation.update({ where: { id }, data: { unreadCount: 0 } });
   }

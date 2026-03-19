@@ -38,4 +38,28 @@ export class NotificationsService {
   async notify(tenantId: string, type: string, title: string, titleAr: string, body: string, bodyAr: string, data?: any, userId?: string) {
     return this.create(tenantId, { userId, type, title, titleAr, body, bodyAr, data });
   }
+
+  /**
+   * Purge old notifications to keep the table lean.
+   * Deletes read notifications older than `readDays` days and any notification
+   * older than `maxDays` days regardless of read state.
+   * Should be called from a scheduler (e.g. @Cron('0 3 * * *')).
+   */
+  async pruneStale(readDays = 30, maxDays = 90): Promise<{ deleted: number }> {
+    const now = new Date();
+    const readCutoff = new Date(now.getTime() - readDays * 86400000);
+    const maxCutoff = new Date(now.getTime() - maxDays * 86400000);
+
+    const result = await this.prisma.notification.deleteMany({
+      where: {
+        OR: [
+          { isRead: true, readAt: { lt: readCutoff } },
+          { createdAt: { lt: maxCutoff } },
+        ],
+      },
+    });
+
+    this.logger.log(`Pruned ${result.count} stale notifications`);
+    return { deleted: result.count };
+  }
 }
