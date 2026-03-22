@@ -24,6 +24,9 @@ export class ContactsController {
   @Get(':id') @ApiOperation({ summary: 'Get contact details' })
   async findOne(@TenantId() tid: string, @Param('id') id: string) { return this.service.findById(tid, id); }
 
+  @Get(':id/engagement-score') @ApiOperation({ summary: 'Get RFM-based engagement score (0-100) for a contact' })
+  async engagementScore(@TenantId() tid: string, @Param('id') id: string) { return this.service.getEngagementScore(tid, id); }
+
   @Post() @ApiOperation({ summary: 'Create contact' })
   async create(@TenantId() tid: string, @Body() dto: CreateContactDto) { return this.service.create(tid, dto); }
 

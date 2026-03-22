@@ -2,10 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AiService } from '../ai/ai.service';
 
 @Injectable()
 export class ContactsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private ai: AiService) {}
 
   async findAll(tenantId: string, query: { page?: number; limit?: number; search?: string; source?: string; sortBy?: string; sortOrder?: string }) {
     const { page = 1, limit = 20, search, source, sortBy = 'createdAt', sortOrder = 'desc' } = query;
@@ -123,6 +124,17 @@ export class ContactsService {
       this.prisma.contact.update({ where: { id: secondaryId }, data: { isBlocked: true, notes: `[مدمج مع ${primary.phone}]` } }),
     ]);
     return this.prisma.contact.findFirst({ where: { id: primaryId }, include: { _count: { select: { orders: true, conversations: true } } } });
+  }
+
+  /** Compute RFM-based engagement score (0-100) for a single contact */
+  async getEngagementScore(tenantId: string, id: string) {
+    const contact = await this.prisma.contact.findFirst({
+      where: { id, tenantId },
+      select: { totalOrders: true, totalSpent: true, lastOrderAt: true },
+    });
+    if (!contact) throw new NotFoundException('جهة الاتصال غير موجودة');
+    const score = this.ai.computeEngagementScore(contact);
+    return { contactId: id, score };
   }
 
   /** Find potential duplicates by phone similarity */

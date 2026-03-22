@@ -5,6 +5,7 @@ import { NotificationsService } from '../../modules/notifications/notifications.
 import { AuditLogService } from '../../modules/audit-log/audit-log.service';
 import { ChatbotsService } from '../../modules/chatbots/chatbots.service';
 import { WebhookEndpointsService } from '../../modules/webhook-endpoints/webhook-endpoints.service';
+import { AiService } from '../../modules/ai/ai.service';
 
 @Injectable()
 export class EventBusService {
@@ -17,6 +18,7 @@ export class EventBusService {
     private auditLog: AuditLogService,
     private chatbots: ChatbotsService,
     private webhooks: WebhookEndpointsService,
+    private ai: AiService,
   ) {}
 
   /** Safe wrapper — logs errors but never throws, so one failing handler can't break the chain */
@@ -68,6 +70,27 @@ export class EventBusService {
     await this.safe('chatbot:match', async () => {
       const matched = await this.chatbots.matchTrigger(tenantId, messageText);
       if (matched) this.logger.log(`Chatbot matched: ${matched.name}`);
+    });
+
+    // AI: analyse sentiment/intent + generate smart replies in parallel
+    await this.safe('ai:analyze', async () => {
+      const [analysis, smartReplies] = await Promise.all([
+        this.ai.analyzeMessage(messageText),
+        this.ai.generateSmartReplies(messageText),
+      ]);
+      // Push enriched AI metadata to agents viewing the conversation in real-time
+      this.ws.emitConversationUpdate(tenantId, {
+        id: conversationId,
+        aiInsights: {
+          messageId: message.id,
+          intent: analysis.intent,
+          intentConfidence: analysis.intentConfidence,
+          sentiment: analysis.sentiment,
+          sentimentScore: analysis.sentimentScore,
+          urgency: analysis.urgency,
+          smartReplies,
+        },
+      });
     });
 
     await this.safe('automation:msg', () => this.automation.executeRules(tenantId, 'message.inbound', { conversationId, contactId, text: messageText }));

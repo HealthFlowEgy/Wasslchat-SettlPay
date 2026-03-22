@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AiService } from '../ai/ai.service';
 
 @Injectable()
 export class ConversationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private ai: AiService) {}
 
   async findAll(tenantId: string, query: { page?: number; limit?: number; status?: string; assigneeId?: string; unreadOnly?: boolean }) {
     const { page = 1, limit = 20, status, assigneeId, unreadOnly } = query;
@@ -53,7 +54,22 @@ export class ConversationsService {
     const conv = await this.prisma.conversation.findFirst({ where: { id, tenantId } });
     if (!conv) throw new NotFoundException('المحادثة غير موجودة');
     const data: any = { status };
-    if (status === 'RESOLVED') data.resolvedAt = new Date();
+    if (status === 'RESOLVED') {
+      data.resolvedAt = new Date();
+      // Generate AI summary of the conversation and store in metadata
+      try {
+        const messages = await this.prisma.message.findMany({
+          where: { conversationId: id },
+          orderBy: { createdAt: 'asc' },
+          select: { direction: true, content: true, createdAt: true },
+        });
+        const summary = await this.ai.summarizeConversation(messages);
+        if (summary) {
+          const existingMeta: any = conv.metadata ?? {};
+          data.metadata = { ...existingMeta, aiSummary: summary, aiSummaryAt: new Date().toISOString() };
+        }
+      } catch { /* non-critical — continue without summary */ }
+    }
     return this.prisma.conversation.update({ where: { id }, data });
   }
 
